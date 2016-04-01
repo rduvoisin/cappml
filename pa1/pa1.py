@@ -35,7 +35,7 @@
 
 	# Please submit the Python code for each of these tasks as well as 
 	# the new data files for this assignment.
-from __future__ import division
+# from __future__ import division
 import os
 import sys
 import pandas as pd
@@ -46,34 +46,11 @@ import matplotlib.cm as cm
 import matplotlib.patches as patches
 import math
 import time
-from urllib import urlopen
-from bs4 import BeautifulSoup
+import json
+import requests
 
-# Read in csv data
-student_csv = 'mock_student_data.csv'
-student_data = pd.read_csv(student_csv)
-student_data['Male']=student_data.Gender.map({'Female' : 0, 'Male' : 1})
-student_data['Grad']=student_data.Graduated.map({'No' : 0, 'Yes' : 1})
-# Show some summary statistics:
-#     The summary statistics should include 
-#     mean, 
-#     median, 
-#     mode, 
-#     standard deviation, as well as 
-#     the number of missing values for each field.
-student_data.describe()
-for feature in student_data.columns.tolist():
-	print '\nInspect {}:'.format(feature), student_data[feature].describe()
-
-# Retrieve Genderized Gender for all missing Gender values:
-#     You will notice that a lot of students are missing gender values . 
-#     Your task is to infer the gender of the student based on their name. 
-#     Please use the API at www.genderize.io to infer the gender of each student 
-#     and generate a new data file.
-# 	GET https://api.genderize.io/?name[0]=peter&name[1]=lois&name[2]=stevie 
 base_url = "https://api.genderize.io"
 index_ref  = "/?name="
-student_data.head(10)
 
 def grab_link_like_person(url, interval=2):
     '''
@@ -83,82 +60,98 @@ def grab_link_like_person(url, interval=2):
 
     Returns an opened url page to scrape  content.
     '''
-    html = urlopen(url)
+    response = requests.get(url)
     time.sleep(interval)
-    return html
+    return response
 
 
-def grab_gender(row, reference_column='Gender', guess_column = 'Guess'):
-	column='First_name'
-	if isinstance(row[reference_column], float):
-		requesturl = base_url + index_ref + row[column]
-		baseindex_html = grab_link_like_person(requesturl)
-		baseindex = BeautifulSoup(baseindex_html, 'lxml')
-		x = baseindex.p.string.encode('utf-8')
-		y = {}
-		for e in x[1:len(x)-1].strip().split(','):
-			y[e.split(':')[0]]=e.split(':')[1]
-		for k in y.keys():
-			l= y[k].strip('"')
-			y[k] = l
-		y
-		responses = {}
-		for k in y.keys():
-			q = k.strip('"')
-			responses[q] = y[k]
-		responses
-		print responses['name'], row[guess_column], responses['gender'].title()
-		row[guess_column] = responses['gender'].title()
-	else:
-		row[guess_column] = row[guess_column]
+def grab_gender(row, column='First_name', reference_column='Gender', guess_column = 'Guess'):
+    '''
+    Requests genderize.io for each row where
+    gender is missing (np.nan). 
 
-first = 'First_name'
-student_data['Guess'] = student_data['Gender']
-student_data2 = student_data.copy()
-student_data2 = student_data2.apply(lambda row: grab_gender(row), axis=1)
-student_data['Guess'] = pd.DataFrame(student_data2)
+    Converts answer into a response dictionary
+    and returns the 'gender' value to the cell.
+    '''
+    if isinstance(row[reference_column], float):
+        requesturl = base_url + index_ref + row[column]
+        responses = json.loads(grab_link_like_person(requesturl).text)
+        print(responses['name'], row[guess_column], responses['gender'].title())
+        row[guess_column] = responses['gender'].title()
+    else:
+        row[guess_column] = row[guess_column]
 
-# Problem B
-#
-# A larger data set than the one in the previous problem 
-# was used to build a logistic regression model that predicts 
-# the probability an individual student will graduate.
-#
-# Below are coefficients from this model.  
-# The definitions of the variables are below.
-#
-#     Male-Coded as 1 if the student is M, 0 if he/she is not
-#     Female-Coded as 1 if the student is Female, 0 if he/she is not
-#     Ln_Family_Income-The natural logarithm of the student's Family income (in dollars)
-#     Age-The student's age (in years)
-#     Age_Sq-The student 's age (in years) squared
-#     Census_College-The percentage of residents in the student 's neighborhood who have a college degree (scaled from 0 to 100)
-#     AfAm-Coded as 1 if the student is African American, 0 if he/she is not
-#     AfAm_Male-Coded as 1 if the student is both African American and Male, 0 if he/she is not
-#     Constant-The constant term
-#
-#
-#
-#     Consider 4 students, Adam, Bob, Chris and David. 
-# 		Adam and Chris share identical characteristics except for 
-# 		their family incomes.  Bob and David also share identical 
-# 		characteristics (with each other, not necessarily Adam and Chris), 
-# 		except for their incomes.
-#
+if __name__=='__main__':
+    # Read in csv data
+    student_csv = 'mock_student_data.csv'
+    student_data = pd.read_csv(student_csv)
+    student_data['Male']=student_data.Gender.map({'Female' : 0, 'Male' : 1})
+    student_data['Grad']=student_data.Graduated.map({'No' : 0, 'Yes' : 1})
+    student_data.head(10)
+    # Show some summary statistics:
+    #     The summary statistics should include 
+    #     mean, 
+    #     median, 
+    #     mode, 
+    #     standard deviation, as well as 
+    #     the number of missing values for each field.
+    student_data.describe()
+    for feature in student_data.columns.tolist():
+    	print('\nInspect {}:'.format(feature), student_data[feature].describe())
 
-#
-# Based on the coefficients above, who would you think has a higher probability of graduating?
-#
-#     Chris
-#     David
-#     They have the same probability
-#     Cannot tell based on the information provided
-#
-# What is your reasoning?  (you need not calculate an exact probability to answer this question. Just explain your reasoning in general terms.)
-#
-#     The coefficient for AfAm_Male is negative. How do you interpret this? Does this mean that African-American Males are more likely to not graduate than African-American Females? What about relative to non African American males?
-#     How do we interpret the difference in graduation probability between students of different ages? How do the variables in the model estimate such probability?
-#     Are there any variables in this model that you would choose to drop? Why or why not? Would you need more information in order to make this decision?
-#
-# Instruction of how to submit your homework is found at http://people.cs.uchicago.edu/~larsson/capp30254-spr-15/. The instructions assume familiarity with the submission system used in CMSC 12100 and 12200. If you did not take these classes, please come to office hours for help getting your assignment submitted.
-# mock_student_data.csv
+    # Retrieve Genderized Gender for all missing Gender values:
+    #     You will notice that a lot of students are missing gender values . 
+    #     Your task is to infer the gender of the student based on their name. 
+    #     Please use the API at www.genderize.io to infer the gender of each student 
+    #     and generate a new data file.
+    # 	GET https://api.genderize.io/?name[0]=peter&name[1]=lois&name[2]=stevie 
+
+    first = 'First_name'
+    student_data['Guess'] = student_data['Gender']
+    student_data2 = student_data.copy()
+    student_data = student_data.apply(lambda row: grab_gender(row), axis=1)
+
+    # Problem B
+    #
+    # A larger data set than the one in the previous problem 
+    # was used to build a logistic regression model that predicts 
+    # the probability an individual student will graduate.
+    #
+    # Below are coefficients from this model.  
+    # The definitions of the variables are below.
+    #
+    #     Male-Coded as 1 if the student is M, 0 if he/she is not
+    #     Female-Coded as 1 if the student is Female, 0 if he/she is not
+    #     Ln_Family_Income-The natural logarithm of the student's Family income (in dollars)
+    #     Age-The student's age (in years)
+    #     Age_Sq-The student 's age (in years) squared
+    #     Census_College-The percentage of residents in the student 's neighborhood who have a college degree (scaled from 0 to 100)
+    #     AfAm-Coded as 1 if the student is African American, 0 if he/she is not
+    #     AfAm_Male-Coded as 1 if the student is both African American and Male, 0 if he/she is not
+    #     Constant-The constant term
+    #
+    #
+    #
+    #     Consider 4 students, Adam, Bob, Chris and David. 
+    # 		Adam and Chris share identical characteristics except for 
+    # 		their family incomes.  Bob and David also share identical 
+    # 		characteristics (with each other, not necessarily Adam and Chris), 
+    # 		except for their incomes.
+    #
+
+    #
+    # Based on the coefficients above, who would you think has a higher probability of graduating?
+    #
+    #     Chris
+    #     David
+    #     They have the same probability
+    #     Cannot tell based on the information provided
+    #
+    # What is your reasoning?  (you need not calculate an exact probability to answer this question. Just explain your reasoning in general terms.)
+    #
+    #     The coefficient for AfAm_Male is negative. How do you interpret this? Does this mean that African-American Males are more likely to not graduate than African-American Females? What about relative to non African American males?
+    #     How do we interpret the difference in graduation probability between students of different ages? How do the variables in the model estimate such probability?
+    #     Are there any variables in this model that you would choose to drop? Why or why not? Would you need more information in order to make this decision?
+    #
+    # Instruction of how to submit your homework is found at http://people.cs.uchicago.edu/~larsson/capp30254-spr-15/. The instructions assume familiarity with the submission system used in CMSC 12100 and 12200. If you did not take these classes, please come to office hours for help getting your assignment submitted.
+    # mock_student_data.csv
