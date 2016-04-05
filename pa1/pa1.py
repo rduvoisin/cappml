@@ -130,6 +130,10 @@ if __name__=='__main__':
     # 	GET https://api.genderize.io/?name[0]=peter&name[1]=lois&name[2]=stevie 
 
     # first = 'First_name'
+    # row = 'Rebeccah'
+    # requesturl = base_url + index_ref + row
+    # response = grab_link_like_person(requesturl) //still timed out...
+
     # student_data['Guess'] = student_data['Gender']
     # student_data2 = student_data.copy()
     # student_data3 = student_data.copy()
@@ -146,6 +150,7 @@ if __name__=='__main__':
 
 #     Fill in missing values with the 
 #     mean of the values for that attribute
+
     student_data_na_byfeaturemean = student_data.copy()
     with_null_data = ['Age', 'GPA', 'Days_missed']
     for feature in with_null_data:
@@ -175,6 +180,13 @@ if __name__=='__main__':
             feature_by_class_mean=feature_by_class_mean,
             student_data=student_data), axis=1)
         print(student_data_byclass_mean[feature].describe())
+
+
+    print("We should instead try to correlate whether the \
+          presence of data on a feature is correlated with the outcome. \
+          We may also choose to stratify further. Then we may \
+          want to use sample weights and means. One way to do this \
+          is propensity score matching.")
 
 
     # Problem B
