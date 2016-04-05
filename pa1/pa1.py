@@ -62,24 +62,46 @@ def grab_link_like_person(url, interval=2):
     '''
     response = requests.get(url)
     time.sleep(interval)
+    print(response)
     return response
 
 
-def grab_gender(row, column='First_name', reference_column='Gender', guess_column = 'Guess'):
+def grab_gender(row, interval=2, column='First_name', reference_column='Gender', guess_column='Guess'):
     '''
     Requests genderize.io for each row where
     gender is missing (np.nan). 
-
     Converts answer into a response dictionary
     and returns the 'gender' value to the cell.
     '''
     if isinstance(row[reference_column], float):
         requesturl = base_url + index_ref + row[column]
-        responses = json.loads(grab_link_like_person(requesturl).text)
+        responses = json.loads(grab_link_like_person(requesturl, interval).text)
         print(responses['name'], row[guess_column], responses['gender'].title())
         row[guess_column] = responses['gender'].title()
+        print(responses['name'], row[guess_column])
     else:
         row[guess_column] = row[guess_column]
+
+
+def convert_na_by_class_mean(row, column, unique_classes=None,
+                             student_data=None, feature_by_class_mean=None,
+                             reference_column='Grad', INDEX='ID'):
+    '''
+    Converts missing values with respect to class means.
+    '''
+    if not unique_classes:
+        unique_classes = student_data[reference_column].unique().tolist()
+    feature_by_class_mean = student_data.groupby(reference_column)[column].agg('mean').copy()
+    if str(row[column])=="nan":
+        for level in unique_classes:
+            f_mean = feature_by_class_mean[level]
+            if row[reference_column] == level:
+                # print('Mean for level ({}={}) for {}: {}\n'.format(reference_column, level, column, f_mean))
+                row[column] = f_mean
+                return row[column]
+    else:
+        return row[column]
+
 
 if __name__=='__main__':
     # Read in csv data
@@ -88,6 +110,7 @@ if __name__=='__main__':
     student_data['Male']=student_data.Gender.map({'Female' : 0, 'Male' : 1})
     student_data['Grad']=student_data.Graduated.map({'No' : 0, 'Yes' : 1})
     student_data.head(10)
+    student_data.shape  
     # Show some summary statistics:
     #     The summary statistics should include 
     #     mean, 
@@ -106,10 +129,53 @@ if __name__=='__main__':
     #     and generate a new data file.
     # 	GET https://api.genderize.io/?name[0]=peter&name[1]=lois&name[2]=stevie 
 
-    first = 'First_name'
-    student_data['Guess'] = student_data['Gender']
-    student_data2 = student_data.copy()
-    student_data = student_data.apply(lambda row: grab_gender(row), axis=1)
+    # first = 'First_name'
+    # student_data['Guess'] = student_data['Gender']
+    # student_data2 = student_data.copy()
+    # student_data3 = student_data.copy()
+    # student_data4 = student_data.copy()
+    # student_data4['Guess'] = student_data2.apply(lambda row: grab_gender(row,2), axis=1)
+
+    # student_data2.head(10)
+    # student_data4.head(10)
+
+#     You will also notice that some of the other attributes are missing. 
+#     Your task is to fill in the missing values for 
+#     Age, GPA, and Days_missed 
+#     using the following approaches:
+
+#     Fill in missing values with the 
+#     mean of the values for that attribute
+    student_data_na_byfeaturemean = student_data.copy()
+    with_null_data = ['Age', 'GPA', 'Days_missed']
+    for feature in with_null_data:
+        print(student_data_na_byfeaturemean[feature].describe())
+        f_mean = student_data_na_byfeaturemean[feature].mean()
+        print('Mean for {}: {}\n'.format(feature, f_mean))
+        student_data_na_byfeaturemean[feature] = student_data_na_byfeaturemean[feature].replace(np.nan, f_mean)
+        print(student_data_na_byfeaturemean[feature].describe())
+
+#     Fill in missing values with a class-conditional mean 
+#     (where the class is whether they graduated or not).
+#     Is there a better, more appropriate method for 
+#     filling in the missing values? 
+#     If yes, describe and implement it.
+
+    print('\n\nReplace missings by class means:\n')
+    reference_column = 'Grad'
+    student_data_byclass_mean = student_data.copy() 
+    for feature in with_null_data:
+        print('\n\n{}:\n'.format(feature))
+        unique_classes = student_data[reference_column].unique().tolist()
+        feature_by_class_mean = student_data.groupby(reference_column)[feature].agg('mean').copy()
+        student_data_byclass_mean[feature] = \
+            student_data_byclass_mean.apply(lambda row: 
+            convert_na_by_class_mean(row, feature, 
+            unique_classes=unique_classes, 
+            feature_by_class_mean=feature_by_class_mean,
+            student_data=student_data), axis=1)
+        print(student_data_byclass_mean[feature].describe())
+
 
     # Problem B
     #
