@@ -121,7 +121,6 @@ if __name__=='__main__':
     student_data.describe()
     for feature in student_data.columns.tolist():
     	print('\nInspect {}:'.format(feature), student_data[feature].describe())
-
     # Retrieve Genderized Gender for all missing Gender values:
     #     You will notice that a lot of students are missing gender values . 
     #     Your task is to infer the gender of the student based on their name. 
@@ -129,19 +128,13 @@ if __name__=='__main__':
     #     and generate a new data file.
     # 	GET https://api.genderize.io/?name[0]=peter&name[1]=lois&name[2]=stevie 
 
-    # first = 'First_name'
-    # row = 'Rebeccah'
-    # requesturl = base_url + index_ref + row
-    # response = grab_link_like_person(requesturl) //still timed out...
-
-    # student_data['Guess'] = student_data['Gender']
-    # student_data2 = student_data.copy()
-    # student_data3 = student_data.copy()
-    # student_data4 = student_data.copy()
-    # student_data4['Guess'] = student_data2.apply(lambda row: grab_gender(row,2), axis=1)
-
-    # student_data2.head(10)
-    # student_data4.head(10)
+    student_data['Guess'] = student_data['Gender']
+    student_data2 = student_data.copy()
+    student_data2 = student_data2.apply(lambda row: grab_gender(row,2), axis=1)
+    student_data['Gender_guess'] = pd.DataFrame(student_data2)
+    # print(gender_guess.head(10))
+    student_data2.head(10)
+    student_data.head(10)
 
 #     You will also notice that some of the other attributes are missing. 
 #     Your task is to fill in the missing values for 
@@ -188,7 +181,6 @@ if __name__=='__main__':
           want to use sample weights and means. One way to do this \
           is propensity score matching.")
 
-
     # Problem B
     #
     # A larger data set than the one in the previous problem 
@@ -197,34 +189,18 @@ if __name__=='__main__':
     #
     # Below are coefficients from this model.  
     # The definitions of the variables are below.
-    #
-    #     Male-Coded as 1 if the student is M, 0 if he/she is not
-    #     Female-Coded as 1 if the student is Female, 0 if he/she is not
-    #     Ln_Family_Income-The natural logarithm of the student's Family income (in dollars)
-    #     Age-The student's age (in years)
-    #     Age_Sq-The student 's age (in years) squared
-    #     Census_College-The percentage of residents in the student 's neighborhood who have a college degree (scaled from 0 to 100)
-    #     AfAm-Coded as 1 if the student is African American, 0 if he/she is not
-    #     AfAm_Male-Coded as 1 if the student is both African American and Male, 0 if he/she is not
-    #     Constant-The constant term
-    #
-    #
-    #
     #     Consider 4 students, Adam, Bob, Chris and David. 
     # 		Adam and Chris share identical characteristics except for 
     # 		their family incomes.  Bob and David also share identical 
     # 		characteristics (with each other, not necessarily Adam and Chris), 
     # 		except for their incomes.
     #
-
-    #
-    # Based on the coefficients above, who would you think has a higher probability of graduating?
-    #
-    #     Chris
-    #     David
-    #     They have the same probability
-    #     Cannot tell based on the information provided
-    #
+    
+    print('Problem B1:\n\nThe 2 unknown students, Chris and David, have equal probability\n' \
+         'of graduating.  This is known from respective higher income counterparts, Adam and Bob, \n' \
+         'who, despite their difference in income (delta $150,000) have the same probability of graduating.\n' \
+         'Since Chris and David also have a difference in income of $150,000, in the same direction, \n' \
+         'their relative probablities must also be the same, although not 50%.')
     # What is your reasoning?  (you need not calculate an exact probability to answer this question. Just explain your reasoning in general terms.)
     #
     #     The coefficient for AfAm_Male is negative. How do you interpret this? Does this mean that African-American Males are more likely to not graduate than African-American Females? What about relative to non African American males?
@@ -232,4 +208,15 @@ if __name__=='__main__':
     #     Are there any variables in this model that you would choose to drop? Why or why not? Would you need more information in order to make this decision?
     #
     # Instruction of how to submit your homework is found at http://people.cs.uchicago.edu/~larsson/capp30254-spr-15/. The instructions assume familiarity with the submission system used in CMSC 12100 and 12200. If you did not take these classes, please come to office hours for help getting your assignment submitted.
+
     # mock_student_data.csv
+    print("Problem B2:\n\nA.i) Yes. The AfAm_Male interaction term tells us\n\
+        that the odds ratio of graduation of AfAm_Males to AfAm_Females is significantly smaller.\n\
+        A.ii) Likewise, AfAm_Male interaction term tells us\n\
+        that the odds ratio of graduation of AfAm_Males to NonAfam_Males is \n\
+        significantly smaller.\n\
+        B) Age isn't a godd predictor of graduation.\n\
+        The coefficients are saying that an increase in age (either by years or years^2)\n\
+        won't increase the likelihood of graduation and this holds true for ages approaching 130.\n\
+        C) I'd likely drop the Age^2 and one of the gender values so that there aren't\n\
+        any very correlated predicors.")
