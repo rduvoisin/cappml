@@ -15,7 +15,6 @@ import hide_code
 import notebook
 import re
 import seaborn as sns; sns.set(style="ticks", color_codes=True)
-from splitter import *
 from model import *
 from sklearn import cross_validation
 from sklearn.neighbors import KNeighborsRegressor as KNNR
@@ -28,6 +27,7 @@ from sklearn.ensemble import GradientBoostingClassifier as GradientBoosting
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_curve, auc, classification_report, confusion_matrix, precision_score, recall_score, roc_auc_score
 from scipy.stats.mstats import mquantiles
+# %matplotlib inline
 # get_ipython().magic('matplotlib inline')
 
 
