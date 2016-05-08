@@ -11,7 +11,7 @@ import math
 import time
 import json
 import requests
-import hide_code
+# import hide_code
 import notebook
 import re
 import seaborn as sns; sns.set(style="ticks", color_codes=True)
@@ -126,7 +126,7 @@ def get_correlates_dict(dataset, feature_wnull, not_same=True, output_variable=N
 
 # Feed this dictionary into a function that
 # trains a model of missings imputations
-def get_encoded_features_list(dataset, discrete_threshold=None, excepting=None, only=None):
+def get_encoded_features_list(dataset, discrete_threshold=None, excepting=False, only=False):
     '''Returns a list of discrete variables that
        have numerical values signifying missing.
        (i.e. 96=DK, 98=REFUSED)'''
@@ -134,7 +134,9 @@ def get_encoded_features_list(dataset, discrete_threshold=None, excepting=None, 
     print('\nINSPECT DISCRETE FEATURES FOR ENCODED MISSISINGS:\n')
     if not only:
         only = dataset.columns.tolist()
-    only = [feature for feature in only if feature not in excepting]
+    if excepting:
+        only = [feature for feature in only if feature not in excepting]
+
     for col in only:
         if discrete_threshold:
             if len(dataset[col].unique()) < discrete_threshold:
@@ -181,45 +183,66 @@ def drop_obs_w_anynan(dataset, features_list):
     return dataset
 
 
-def decode_and_drop_missings(raw_train, decodings_dict, except_threshold=None, encode_except=None, outcome_variable=None):
+def decode_and_drop_missings(trainer, ModelTrains, decodings_dict, except_threshold=None, encode_except=None, outcome_variable=None):
     '''Inputs:
         - Dataframe
         - Decoding variables to values dictionary
         - Optional discrete_threshold (i.e. 1000 unique values)
-       Returns '''
-    encoded_features = get_encoded_features_list(raw_train,
+       Returns 3 Dataframes of missings removal strategies.'''
+    encoded_features = get_encoded_features_list(trainer.now.copy(),
                                                  except_threshold,
                                                  excepting=encode_except)
-
+    decodetrainer = trainer.now.copy()
     for i in range(len(decodings_dict.keys())):
         if not decodings_dict[i]['on']:
             decodings_dict[i]['on'] = encoded_features
         else:
             encoded_features.extend(decodings_dict[i]['on'])
-        raw_train, imputation_candidates =         decode_extended_to_nan(raw_train, decodings_dict[i]['on'],
-                               to_replace = decodings_dict[i]['to_replace'],
-                               values = decodings_dict[i]['with_replace'])
+        raw_train, imputation_candidates =  decode_extended_to_nan(decodetrainer, decodings_dict[i]['on'],
+                                            to_replace = decodings_dict[i]['to_replace'],
+                                            values = decodings_dict[i]['with_replace'])
+
+    # Corrected dataset with all missings in place. Stage as Trainer.
+    Tdecode = Trainer('FULL_MISS', raw_train, trainer.outcome)
+    Tdecode.set_parent(trainer, ModelTrains)
+    ModelTrains.add(Tdecode)
+    
 
     # Derive binary missing indicator variables
-    dropped_train = raw_train.copy()
-    derived_train = raw_train.copy()
+    dropped_train = Tdecode.now.copy()
+    derived_train = Tdecode.now.copy()
     inspect_missing_list = []
     for feature in imputation_candidates[imputation_candidates.Total_missing > 0].index:
         if feature not in outcome_variable:
             inspect_missing_list += [feature]
             is_missing_var = feature + '_missing'
             derived_train[is_missing_var] = derived_train[feature].isnull().map({True : 1, False : 0})
+    Tim = Trainer('FULL_ISMISS', derived_train.copy(), Tdecode.outcome)
+    Tim.set_parent(Tdecode, ModelTrains)
+    ModelTrains.add(Tim)
 
     # Drop all missings
-    train_missing = dropped_train.copy()
+    if isinstance(outcome_variable, str):
+        outcome_variable = list(outcome_variable)
 
+    x = Tim.now.copy()
     if outcome_variable:
-        dropping_columns = [c for c in derived_train.index.tolist() if c not in outcome_variable]
-        derived_train.dropna(how='any', axis=1, subset=[dropping_columns])
+        dropping_columns = [c for c in Tim.now.columns.tolist() if c not in outcome_variable]
+        # derived_train.dropna(how='any', axis=1, subset=[dropping_columns]).copy()
+        x.dropna(how='any', axis=1, subset=[dropping_columns])
+        Tcol = Trainer('COL_DROP', x, Tim.outcome)
     else:
-        derived_train.dropna(how='any', axis=1)
-    dropped_train =  drop_obs_w_anynan(dropped_train, encoded_features).copy()
-    return dropped_train, derived_train, train_missing, inspect_missing_list
+        x.dropna(how='any', axis=1)
+        Tcol = Trainer('COL_DROP', x, Tim.outcome)
+    Tcol.set_parent(Tim, ModelTrains)
+    ModelTrains.add(Tcol)   
+    
+    dropped_train =  drop_obs_w_anynan(Tdecode.now.copy(), encoded_features).copy()
+    Trow = Trainer('ROW_DROP', dropped_train, Tdecode.outcome)
+    Trow.set_parent(Tdecode, ModelTrains)
+    for i in ModelTrains.trainers:
+        print(i.name, i.shape, i)
+    return inspect_missing_list
 
 
 

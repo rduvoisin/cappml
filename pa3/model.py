@@ -1,3 +1,4 @@
+from __future__ import division 
 import os
 import sys
 import pandas as pd
@@ -19,18 +20,12 @@ from sklearn import cross_validation
 FIGWIDTH = 10
 FIGHEIGHT = 8
 
-def inspect_pairplot(trainer, filedir='data/plots', inspect=None, FIGWIDTH=FIGWIDTH, FIGHEIGHT=FIGHEIGHT):
-    '''Produce pairwise histograms'''
-    if not inspect:
-        inspect = trainer.now.columns.tolist()
-    if trainer.target not in inspect:
-        inspect.append(trainer.target) 
-
-    x = len(inspect)/len(trainer.now.columns.tolist())
-    seapair = sns.pairplot(data=trainer.now[inspect].dropna(), hue = trainer.target)
-    save_this_directory = filedir + '/{}'.format(trainer.name)
-    save_this_here = save_this_directory
-    
+def inspect_correlations(ModelTrains, filedir='data/plots'):
+    '''Produce Correlation Matrices with Nonmissing Traner Objects'''
+    plt.close('all')
+    nonissing_trainers = []
+    save_this_directory = filedir + '/{}'.format(t.name)
+    save_this_here = save_this_directory + '/correlations'
     try:
         os.mkdir(filedir)
     except:
@@ -43,48 +38,120 @@ def inspect_pairplot(trainer, filedir='data/plots', inspect=None, FIGWIDTH=FIGWI
         os.mkdir(save_this_here)
     except:
         pass
-    
-    t = "Distributions of {} features by {}".format(x, trainer.target)
-    # sns.title(t)
+    print('Nonmissing Trainers for Correlations')
+    for trainer in ModelTrains.trainers:
+        if trainer.now.isnull().sum().sum() == 0:
+            x, y, z, a = t.get_attributes()
+            nonissing_trainers.append(trainer)
+            plt.figure(figsize=(12, FIGWIDTH))
+            g = sns.corrplot(trainer.now, annot=False)
+            t = "Non-Missing Correlation Matrix of {}, {}".format(trainer.name, t.shape)
+            doc = '{}/{}.png'.format(save_this_directory,'corrplot_{}'.format(t.shape))
+            g.fig.text(0.33, 1.02, t, fontsize=18)
+            g.savefig(doc)
+            plt.close('all')
+    plt.close('all')
+
+
+
+def inspect_pairplot(trainer, descriptor=None, filedir='data/plots', 
+                    x_vars=None, y_vars=None, 
+                    inspect=None, size=None):
+    '''Produce pairwise histograms'''
+    plt.close('all')
+    if not inspect:
+        inspect = trainer.now.columns.tolist()
+    if trainer.target not in inspect:
+        inspect.append(trainer.target) 
+    x = len(inspect)
+    if not size:
+        size = x 
+        aspect = 1
+    g = sns.pairplot(data=trainer.now[inspect].dropna(), x_vars=x_vars, y_vars=y_vars, 
+        hue = trainer.target, palette="Set1", 
+        aspect= aspect, size=size)
+    save_this_directory = filedir + '/{}'.format(trainer.name)
+    save_this_here = save_this_directory
+    try:
+        os.mkdir(filedir)
+    except:
+        pass
+    try:
+        os.mkdir(save_this_directory)
+    except:
+        pass
+    try:
+        os.mkdir(save_this_here)
+    except:
+        pass
+    if descriptor:
+        desc = descriptor.replacer
+    t = "Distributions of {}/{} features of {} by {}".format(x, 
+                                                            len(trainer.now.columns.tolist()), 
+                                                            trainer.name,
+                                                            trainer.target)
     doc = '{}/{}.png'.format(save_this_here,'pair_plot_{}'.format(x))
-    # seapair.gcf().tight_layout()
-    seapair.savefig(doc) 
+    g.fig.text(0.33, 1.02, t, fontsize=18)
+    g.savefig(doc) 
+    plt.close('all')
 
 
 def inspect_zeros(trainer, filedir, inspect=None, FIGWIDTH=FIGWIDTH, FIGHEIGHT=FIGHEIGHT):
     '''Produce side-by-side log histograms.'''
+    plt.close()
     complete = []
     D = trainer.now.copy()
     if not inspect:
         inspect = D.columns.tolist()
+    save_this_directory = filedir + '/{}'.format(trainer.name)
+    save_this_here = save_this_directory + '/zeros'
+    try:
+        os.mkdir(filedir)
+    except:
+        pass
+    try:
+        os.mkdir(save_this_directory)
+    except:
+        pass
+    try:
+        os.mkdir(save_this_here)
+    except:
+        pass
     for feature in inspect:
+        print('Inspect {} for Zeros'.format(feature))
+        plt.close()
         for x in inspect:
             if x != feature and (x, feature) not in complete:
                 compare = (x, feature)
                 complete += [compare]
-                fig, axs = plt.subplots(figsize=(FIGWIDTH, FIGHEIGHT))
-                np.log1p(D[D[feature] == 0][x]).hist(bins=30, label ='{} == 0'.format(feature), normed=True)
-                np.log1p(D[D[feature] > 0][x]).hist(bins=30, label ='{} > 0'.format(feature), normed=True).legend(loc='upper right')
-                save_this_directory = filedir + '/{}'.format(trainer.name)
-                save_this_here = save_this_directory + '/zeros'
                 try:
-                    os.mkdir(filedir)
+                    fig, axs = plt.subplots(figsize=(FIGWIDTH, FIGHEIGHT))
+                    np.log1p(D[D[feature] == 0][x]).hist(bins=30, label ='{} == 0'.format(feature), normed=True)
+                    np.log1p(D[D[feature] > 0][x]).hist(bins=30, label ='{} > 0'.format(feature), normed=True).legend(loc='upper right')
+                    t = "Log {} | {} = Zero.".format(x, feature)
+                    plt.title(t)
+                    axs.grid(False)
+                    doc = '{}/{}.png'.format(save_this_here,'inspect_{}_when_{}_zero'.format(x, feature))
+                    plt.gcf().tight_layout()
+                    plt.savefig(doc) 
                 except:
+                    plt.close('all')
                     pass
-                try:
-                    os.mkdir(save_this_directory)
-                except:
-                    pass
-                try:
-                    os.mkdir(save_this_here)
-                except:
-                    pass
-                t = "Log {} when {} Equal to vs. Greater than zero.".format(x, feature)
-                plt.title(t)
-                axs.grid(False)
-                doc = '{}/{}.png'.format(save_this_here,'inspect_{}_when_{}_zero'.format(x, feature))
-                plt.gcf().tight_layout()
-                plt.savefig(doc) 
+                plt.close()
+        
+        fig, axs = plt.subplots(figsize=(FIGWIDTH, FIGHEIGHT)) 
+        tag = '{}_pairplot_when_zero'.format(feature)
+        t = "Distribution | {} = Zero.".format(feature)
+        doc = '{}/{}.png'.format(save_this_here, tag)  
+        try:
+            g = sns.pairplot(data=D[D[feature]==0][inspect].dropna(), 
+                             hue = trainer.target, palette="Set1")
+            g.fig.text(0.33, 1.02, t, fontsize=20)
+            g.savefig(doc) 
+        except:
+            plt.close('all')
+            pass
+        plt.close('all')
 
 
 def read_data(filename, to='pandas', holdout_size = False, drop_column = False):
@@ -139,7 +206,7 @@ class Trainer(object):
         * optionally a validation DataFrame
     '''
     
-    def __init__(self, name, dataframe, outcome_name, validator = None, ModelTrainIndex = None):
+    def __init__(self, name, dataframe, outcome_name, validator = None, ModelTrainIndex = None, parent = None):
         self._name = name
         # self._data, self.features = self._makeData(dataframe)
         self.__data_original = dataframe.copy()
@@ -150,7 +217,7 @@ class Trainer(object):
         self._target = outcome_name
         self._changes = 0
         self._toimpute = None # Made optional for broader application.
-        self._parent = None
+        self._parent = parent
         self._number = ModelTrainIndex
         self._children = []
         self._validator = validator
@@ -215,11 +282,11 @@ class Trainer(object):
         if self._parent:
             return self._parent
 
-    @parent.setter
-    def parent(self, newparent):
-        '''Defines the parent Trainer'''
+    def set_parent(self, newparent, ModelTrains):
+        '''Defines the parent Trainer and adds as Child of parent'''
         if isinstance(newparent, Trainer):
             self._parent = newparent
+            ModelTrains.get(newparent.name).add_child(ModelTrains.get(self._name))
         else:
             raise ValueError("Parent must also be a Trainer object!")
     
@@ -229,7 +296,6 @@ class Trainer(object):
         return self._data.shape
 
    
-    @property
     def nulls(self):
         '''Returns a series of Trainer object's sums of null data.'''
         return self._data.isnull().sum()
@@ -258,6 +324,16 @@ class Trainer(object):
         '''Returns a list of Trainer's children Trainer's.'''
         return self._children
 
+
+    def add_child(self, newchild):
+        '''
+        Adds a Child Trainer Object to the Children list.
+        '''
+        if isinstance(newchild, Trainer):
+            # print('\n**{} birthed {}!'.format(self.name, newchild.name))
+            self._children.append(newchild)
+
+
     def child(self, names):
         '''Returns a list of Child Trainer Objects specified by name strings.'''
         child_list = []
@@ -278,6 +354,12 @@ class Trainer(object):
         '''Returns a the current Trainer's data.'''
         return self._data
   
+
+    @property
+    def same(self):
+        '''Returns the number of times the Trainer's data have been rewritten.'''
+        return self._data.equals(self.__last_version)
+
 
     @property
     def changes(self):
@@ -308,16 +390,6 @@ class Trainer(object):
     def get_original_data(self,):
         '''Returns a the Trainer's data as it was first initialized.'''
         return self.__data_original
-     
-
-    def add_child(self, newchild):
-        '''
-        Adds a Child Trainer Object to the Children list.
-        '''
-        if isinstance(newchild, Trainer):
-            # print('\n**{} birthed {}!'.format(self.name, newchild.name))
-            self._children.append(newchild)
-
     
 
     def get_attributes(self):
@@ -476,20 +548,22 @@ class ModelTrains(object):
             trainer_list.append(TRAIN_PARENT)
             if not self.__training_data.empty:
                 if not self.__holdout.empty:
-                    HOLDOUT = Trainer('HOLDOUT', self.__holdout.copy(), outcome_name, ModelTrainIndex=len(trainer_list))
-                    HOLDOUT.parent = TRAIN_PARENT
+                    HOLDOUT = Trainer('HOLDOUT', self.__holdout.copy(), outcome_name, 
+                                     ModelTrainIndex=len(trainer_list), parent=TRAIN_PARENT)
                     hname, houtcome, htarget, hparent = HOLDOUT.get_attributes()
                     trainer_list.append(HOLDOUT)
-                    TRAIN = Trainer('TRAIN', self.__training_data.copy(), outcome_name, validator=HOLDOUT, ModelTrainIndex=len(trainer_list))
+                    TRAIN = Trainer('TRAIN', self.__training_data.copy(), outcome_name, 
+                                    validator=HOLDOUT, ModelTrainIndex=len(trainer_list), 
+                                    parent=TRAIN_PARENT)
                 else:
-                    TRAIN = Trainer('TRAIN', self.__training_data.copy(), outcome_name, ModelTrainIndex=len(trainer_list))
-                TRAIN.parent = TRAIN_PARENT
+                    TRAIN = Trainer('TRAIN', self.__training_data.copy(), outcome_name, 
+                                    ModelTrainIndex=len(trainer_list), parent=TRAIN_PARENT)
                 TRAIN_PARENT.add_child(TRAIN)
                 trname, troutcome, trtarget, trparent = TRAIN.get_attributes()
                 trainer_list.append(TRAIN)
             if not self.__testing_data.empty:
-                TEST = Trainer('TEST', self.__testing_data.copy(), outcome_name, ModelTrainIndex=len(trainer_list))
-                TEST.parent = TRAIN_PARENT
+                TEST = Trainer('TEST', self.__testing_data.copy(), outcome_name, 
+                               ModelTrainIndex=len(trainer_list), parent=TRAIN_PARENT)
                 TRAIN_PARENT.add_child(TEST)
                 tename, teoutcome, tetarget, teparent = TEST.get_attributes()
                 trainer_list.append(TEST)
@@ -565,11 +639,12 @@ class ModelTrains(object):
             * possibly an analogous testing set
         Returns the list of initialized trainer objects.
         '''
-        trainer_list = self.trainers()
-        if isintance(newtrainer, Trainer):
+        trainer_list = self.trainers
+        if isinstance(newtrainer, Trainer):
             for t in trainer_list:
                 if t.now.equals(newtrainer.now):
                     raise ValueError("\nRedundant! {} already contains this data.".format(t.name))
                     return
             newtrainer.id = len(trainer_list)
             self._trainers.append(newtrainer)
+
