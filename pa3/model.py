@@ -16,25 +16,75 @@ import seaborn as sns; sns.set(style="ticks", color_codes=True)
 from model import *
 from sklearn import cross_validation
 # %matplotlib inline
+FIGWIDTH = 10
+FIGHEIGHT = 8
 
-def inspect(trainer, inspect):
+def inspect_pairplot(trainer, filedir='data/plots', inspect=None, FIGWIDTH=FIGWIDTH, FIGHEIGHT=FIGHEIGHT):
+    '''Produce pairwise histograms'''
+    if not inspect:
+        inspect = trainer.now.columns.tolist()
+    if trainer.target not in inspect:
+        inspect.append(trainer.target) 
+
+    x = len(inspect)/len(trainer.now.columns.tolist())
+    seapair = sns.pairplot(data=trainer.now[inspect].dropna(), hue = trainer.target)
+    save_this_directory = filedir + '/{}'.format(trainer.name)
+    save_this_here = save_this_directory
+    
+    try:
+        os.mkdir(filedir)
+    except:
+        pass
+    try:
+        os.mkdir(save_this_directory)
+    except:
+        pass
+    try:
+        os.mkdir(save_this_here)
+    except:
+        pass
+    
+    t = "Distributions of {} features by {}".format(x, trainer.target)
+    # sns.title(t)
+    doc = '{}/{}.png'.format(save_this_here,'pair_plot_{}'.format(x))
+    # seapair.gcf().tight_layout()
+    seapair.savefig(doc) 
+
+
+def inspect_zeros(trainer, filedir, inspect=None, FIGWIDTH=FIGWIDTH, FIGHEIGHT=FIGHEIGHT):
     '''Produce side-by-side log histograms.'''
+    complete = []
+    D = trainer.now.copy()
+    if not inspect:
+        inspect = D.columns.tolist()
     for feature in inspect:
-        D = trainer.now.copy()
-        print(D[inspect].describe())
-        Y = trainer.outcome
-        fig, axs = plt.subplots(1,2)
-        np.log1p(D[D[feature == 0]][Y]).hist(bins=50, label ='==0', normed=True)
-        np.log1p(D[D[feature > 0]][Y]).hist(bins=50, label ='> 0', normed=True).legend(loc='upper right')
-        save_this_here = filedir + '/{}'.format(trainer.name)
-        try:
-            os.mkdir(save_this_here)
-        except:
-            pass
-        t = "Log Transformation of {} with respect to {}".format(feature, trainer.outcome)
-        plt.title(t)
-        doc = '{}/{}.png'.format(save_this_here,'inspect_{}'.format(feature))
-        plt.savefig(doc) 
+        for x in inspect:
+            if x != feature and (x, feature) not in complete:
+                compare = (x, feature)
+                complete += [compare]
+                fig, axs = plt.subplots(figsize=(FIGWIDTH, FIGHEIGHT))
+                np.log1p(D[D[feature] == 0][x]).hist(bins=30, label ='{} == 0'.format(feature), normed=True)
+                np.log1p(D[D[feature] > 0][x]).hist(bins=30, label ='{} > 0'.format(feature), normed=True).legend(loc='upper right')
+                save_this_directory = filedir + '/{}'.format(trainer.name)
+                save_this_here = save_this_directory + '/zeros'
+                try:
+                    os.mkdir(filedir)
+                except:
+                    pass
+                try:
+                    os.mkdir(save_this_directory)
+                except:
+                    pass
+                try:
+                    os.mkdir(save_this_here)
+                except:
+                    pass
+                t = "Log {} when {} Equal to vs. Greater than zero.".format(x, feature)
+                plt.title(t)
+                axs.grid(False)
+                doc = '{}/{}.png'.format(save_this_here,'inspect_{}_when_{}_zero'.format(x, feature))
+                plt.gcf().tight_layout()
+                plt.savefig(doc) 
 
 
 def read_data(filename, to='pandas', holdout_size = False, drop_column = False):
