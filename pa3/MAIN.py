@@ -35,7 +35,8 @@ T = Delinquency.get(DATA[2][0])
 # Deal with missing values.
 # Collect candidates for imputations of missings. 
 feature_wnull = list_features_wmissing(T.now.copy())
-correlated_features = get_correlates_dict(T.now.copy(), feature_wnull, output_variable=T.outcome)
+print('\n', T.name, 'Correlates\n', T.now.columns)
+correlated_features = get_correlates_dict(T, feature_wnull, output_variable=T.outcome)
 decodings_dict = {0 :{'on': None, 'to_replace' : [96, 98],
                   'with_replace' : [np.nan, np.nan]},
                   1:{'on': ['age'],
@@ -58,30 +59,57 @@ decode_and_drop_missings(T, Delinquency,
 
 print('\nSummarized Data After Removing Cases with Missing Values:\n')
 inspect_correlations(Delinquency)
-# Trow = Delinquency.get('ROW_DROP')
-# Trow.now.describe(include='all').round(2)
 
 # Save tracer datasets as Trainer objects.(name, dataframe, outcome_name, validator = None, ModelTrainIndex = None))
+transform_features_dict = {'RevolvingUtilizationOfUnsecuredLines' : 'log',
+                           'MonthlyIncome' : 'log'}
+coldrop = Delinquency.get('COL_DROP')
+rowdrop = Delinquency.get('ROW_DROP')
+gen_transform_data(Delinquency.get('ROW_DROP'), Delinquency, transform_features_dict)
+gen_transform_data(Delinquency.get('COL_DROP'), Delinquency, transform_features_dict)
 
-# transform_features_dict = {'RevolvingUtilizationOfUnsecuredLines' : 'log',
-#                            'MonthlyIncome' : 'log'}
 
-# train_transformed = gen_transform_data(train_alldropped, transform_features_dict)
-# train_derived_transformed = gen_transform_data(derived_train, transform_features_dict)
-# train_missing_transformed = gen_transform_data(train_missing, transform_features_dict)
-# train_transformed.columns
+dropped_columns_correlates = \
+get_correlates_dict(Delinquency.get('COL_DROP_log'),
+                    Delinquency.get('COL_DROP_log').now.columns,
+                    not_same=True, output_variable=Delinquency.get('COL_DROP_log').outcome)
 
-# dropped_correlates_dict = \
-#  get_correlates_dict(train_transformed,
-#  train_transformed.columns.tolist(),
-#  not_same=True, output_variable='SeriousDlqin2yrs')
+dropped_rows_correlates = \
+get_correlates_dict(Delinquency.get('ROW_DROP_log'),
+                    Delinquency.get('ROW_DROP_log').now.columns,
+                    not_same=True, output_variable=Delinquency.get('ROW_DROP_log').outcome)
 
-# # Recall imputation candidates (features with missing data before drop)
-# print('CONSIDER THESE IMPUTATION CANDIDATES AFTER LOOKING AT COEFFICIENTS OF FIRST APPROXIMATION:\n',
-# imputation_candidates)
+Delinquency.show()
 
-# # Recall train_derived_transformed (contains missings binaries)
+last2trainers = [Delinquency.get(len(Delinquency.trainers) - 2)]
+last2trainers.append(Delinquency.get(len(Delinquency.trainers) - 1))
+
+# Recall imputation candidates (features with missing data before drop)
+print('CONSIDER THESE IMPUTATION CANDIDATES AFTER LOOKING AT COEFFICIENTS OF FIRST APPROXIMATION:\n',
+imputation_candidates)
+
+# Recall train_derived_transformed (contains missings binaries)
 # train_derived_transformed.isnull().sum()
+for t in last2trainers:
+    print(t.id, t.name, t.shape, t.parent.name, t)
+
+
+# Decide which dataset to use for imputation:
+# Corrected TRAIN plus any Transformed features:
+gen_transform_data(Delinquency.get('FULL_MISS'), Delinquency, transform_features_dict)
+
+ImputationTrainer = Delinquency.get('FULL_MISS_log')
+IT = ImputationTrainer
+to_impute =['MonthlyIncome','NumberOfDependents']
+IT.impute = to_impute
+# trainer, ModelTrains, models_to_run = ['RFR', 'DTR', 'KNNR', 'KNN', 'DT', 'RF','LR','ET','AB','GB'],
+#                   cols=None, exclude_features=None, testsize=0.20, 
+#                   results_dataframe=None, regress_only=False,
+#                   filename='output'
+XTrain = splitter(IT, Delinquency)
+
+
+
 
 # # Keep a training set version which uses the binary versions for any variables that have missings
 # train_derived_transformed_dropped = train_derived_transformed.copy()

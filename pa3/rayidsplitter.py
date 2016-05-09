@@ -15,20 +15,204 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.cross_validation import train_test_split
 from sklearn.grid_search import ParameterGrid
 from sklearn.metrics import *
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import *
+from sklearn.pipeline import Pipeline
 import random
 import pylab as pl
 import matplotlib.pyplot as plt
 from scipy import optimize
 import time
+from model import *
+
 
 def get_mse(predicted, val_targets):
     return (((predicted - val_targets) ** 2).sum()) / len(predicted)
 
-def splitter(outcome_variable, dataset, models_to_run = ['RFR', 'DTR', 'KNNR', 'KNN', 'DT', 'RF','LR','ET','AB','GB'],
-                  cols=None, testsize=0.20, 
+
+def build_trainer(trainer, split_list, splits, ModelTrains):
+    '''
+    Converts the test and split into stored Trainer objects.
+    Returns the conjoined X_train trainer object.'''
+    for split_X in split_list:
+        tag = ''
+        y_array = split_X.replace('X', 'y')
+        test_X = split_X.replace('train', 'test')
+        test_y = y_array.replace('train', 'test')
+        if trainer.target in trainer.impute:
+            tag += '_for'
+            for c in trainer.impute:
+                tag += '_{}'.format(c)
+        new_Y =  '{}_{}_'.format(y_array, trainer.target) + trainer.name + tag
+        new_X =  '{}_{}_'.format(split_X, trainer.target) + trainer.name + tag
+
+        newytrainer = Trainer(new_Y, eval(y_array), trainer.target)
+        newytrainer.add_parent(trainer, ModelTrains)
+        try:
+            ModelTrains.add(newytrainer)
+        except:
+            pass
+
+        newxtrainer = Trainer(new_X, eval(split_X), trainer.outcome)
+        newxtrainer.add_parent(trainer, ModelTrains)
+        try:
+            ModelTrains.add(newxtrainer)
+        except:
+            pass
+
+        new_testY =  '{}_{}_'.format(test_y, trainer.target) + trainer.name + tag
+        new_testX =  '{}_{}_'.format(test_X, trainer.target) + trainer.name + tag
+
+        newytester = Trainer(new_testY, eval(test_y), trainer.outcome)
+        newytester.add_parent(trainer, ModelTrains)
+        try:
+            ModelTrains.add(newytester)
+        except:
+            pass
+
+        newxtester = Trainer(new_testX, eval(test_X), trainer.outcome)
+        newxtester.add_parent(trainer, ModelTrains)
+        try:
+            ModelTrains.add(newxtester)
+        except:
+            pass
+
+        # Join Holdout
+        holdoutset = eval(test_y)
+        holdoutset.join(eval(test_X))
+
+        newholdout =  '{}_{}_'.format('HOLDOUT', trainer.target) + trainer.name + tag
+        holdout = Trainer(newholdout, holdoutset, trainer.outcome)
+        holdout.target = trainer.target
+        holdout.add_parent(trainer, ModelTrains)
+        try:
+            ModelTrains.add(holdout)
+        except:
+            pass
+
+        # Join Trainer
+        trainerset = eval(y_array)
+        trainerset.join(eval(split_X))
+
+        newtrainer =  '{}_{}_'.format('TRAIN', trainer.target) + trainer.name + tag
+        trainerx = Trainer(newtrainer, trainerset, trainer.outcome, validator = holdout)
+        trainerx.target = trainer.target
+        trainerx.add_parent(trainer, ModelTrains)
+        try:
+            ModelTrains.add(holdout)
+        except:
+            pass
+
+        return trainerx
+
+
+def plot_precision_recall_n(y_true, y_prob, model_name):
+    from sklearn.metrics import precision_recall_curve
+    y_score = y_prob
+    precision_curve, recall_curve, pr_thresholds = precision_recall_curve(y_true, y_score)
+    precision_curve = precision_curve[:-1]
+    recall_curve = recall_curve[:-1]
+    pct_above_per_thresh = []
+    number_scored = len(y_score)
+    for value in pr_thresholds:
+        num_above_thresh = len(y_score[y_score>=value])
+        pct_above_thresh = num_above_thresh / float(number_scored)
+        pct_above_per_thresh.append(pct_above_thresh)
+    plt.close('all')
+    pct_above_per_thresh = np.array(pct_above_per_thresh)
+    plt.clf()
+    fig, ax1 = plt.subplots()
+    ax1.plot(pct_above_per_thresh, precision_curve, 'b')
+    ax1.set_xlabel('percent of population')
+    ax1.set_ylabel('precision', color='b')
+    ax2 = ax1.twinx()
+    ax2.plot(pct_above_per_thresh, recall_curve, 'r')
+    ax2.set_ylabel('recall', color='r')
+    name = model_name
+    plt.title(name)
+    plt.savefig(name)
+    # plt.show()
+
+
+def precision_at_k(y_true, y_scores, k):
+    threshold = np.sort(y_scores)[::-1][int(k*len(y_scores))]
+    y_pred = np.asarray([1 if i >= threshold else 0 for i in y_scores])
+    return metrics.precision_score(y_true, y_pred)
+
+
+def replace_best_model(trainer, best, model_dict, estimator, p, X_train, X_test, y_train, y_test,
+                       reg_or_clf, model_number, outcome_variable, 
+                       learner, metric):
+    '''Sets the best model so far.'''
+    if model_dict[metric] > best[metric]:
+        try:
+            path = 'data/plots/{}'.format(outcome_variable)
+            os.mkdir(path)
+        except:
+            pass
+        print('\nMODEL SCORE to beat:', best[metric])
+        best['model_dict'] = None
+        best[metric] = model_dict[metric]
+        best['learner'] = estimator
+        best['Classifier'] = model_dict[learner]
+        print('\n\tBETTER MODEL!\n')
+        print('Model {}.'.format(model_dict['Model']))
+        for better_result in model_dict:
+            if better_result != 'Model':
+                print(better_result, model_dict[better_result])
+        best['model_dict'] = model_dict.copy()
+        best['PARAMETERS'] = p
+        best['model_dict'] = model_dict.copy()
+        try:
+            importances = estimator.feature_importances_
+            sorted_idx = np.argsort(importances)
+            padding = np.arange(len(cols)) + 0.5
+            plt.close('all')
+            fig, ax = plt.subplots(figsize=(10,8))
+            t = 'Model {} Imputed {} by {}:\nVariable Importances of {}'.format(
+                model_number, outcome_variable, learner, cols)
+            doc = '{}_{}_{}_feat_importance.png'.format(filename, model_number, learner)
+            plt.barh(padding, importances[sorted_idx], align='center')
+            plt.yticks(padding, cols)
+            plt.xlabel("Relative Importance")
+            plt.title(t)
+            plt.tight_layout()
+            fig.savefig(doc)
+        except:
+            print('Clf has no feature_importances_ attribute:') 
+            # X_train, X_test, y_train, y_test
+        try:
+            try:
+                probs = estimator.fit(X_train, y_train).predict_proba(X_test)[:,1]
+            except:
+                pass
+            try:
+                # print(precision_at_k(y_test,probs,.05))
+                k = .05
+                x = precision_at_k( y_test, probs, k)
+                tag = 'Precision at {}'.format(x, k)
+            except:
+                tag = ''
+            try:
+                t = '{}/Model {} Precision-Recall of {} by {}\n{}:'.format(path, model_number, 
+                                                                    outcome_variable, learner, tag)
+                plot_precision_recall_n(y_test, probs, t)
+            except:
+                pass
+            try:
+                t = '{}/Model {} ROC of {} by {}:'.format(path, model_number, outcome_variable, learner)
+                plot_roc(t, x_test, probs, estimator, outcome_variable)
+            except:
+                pass
+        trainer.best((outcome_variable, best))
+
+
+
+def splitter(trainer, ModelTrains, models_to_run = ['RFR', 'DTR', 'KNNR', 'KNN', 'DT', 'RF','LR','ET','AB','GB'],
+                  cols=None, exclude_features=None, testsize=0.20, 
                   results_dataframe=None, regress_only=False,
-                  filename='output'):
+                  filename=None, threshold=None):
+    
+    split_list = ['X_train', 'X_test']
     
     clfs = {'RF': RandomForestClassifier(n_estimators=50, n_jobs=-1),
         'RFR': RandomForestRegressor(n_estimators=50, n_jobs=-1),
@@ -74,58 +258,191 @@ def splitter(outcome_variable, dataset, models_to_run = ['RFR', 'DTR', 'KNNR', '
                       'metric': [],
                       'metric_score': [],
                       'cross_val_metric': [],
-                      'score': []
+                      'score': [],
+                      'precision' : []
                      }
+    outcome_variable = trainer.target
+    if not filename:
+        name = 'data'
+        try:
+            os.mkdir(name)
+        except:
+            pass
+        try:
+            os.mkdir('{}/{}'.format('data', trainer.name))
+        except:
+            pass
+    else:
+        try:
+            os.mkdir(filename)
+        except:
+            pass
+    filename = filename + '/{}'.format(trainer.name) 
     write_to = filename + '.xlsx'
-        
-    # Loop through models in clfs
+
+    # Query which features to use.
+    if not cols:
+        cols = [c for c in trainer.now.columns.tolist()]
+        if isinstance(exclude_features, str):
+            exclude_features = [exclude_features]
+        if isinstance(exclude_features, list):
+            cols = [c for c in cols if c not in exclude_features]
+        cols = [c for c in cols if c not in [trainer.target, trainer.outcome]]
+    else:
+        for c in cols:
+            if c not in trainer.now.columns.tolist():
+                raise ValueError("{} not included in Trainer object's dataset".format(c))
+                return
+
+    # Stage learner storage collector:
     model_number = 0
     best = {'score': float(0), 'model_dict': None, 'Classifier': None, 'Regressor': None}
     if not results_dataframe:
         results_dataframe = results_matrix.copy()
-    # for dataset in range(len(clfs['trainees'])):
-    # Split the training data into a training set and a validation set
-    # if not cols:
-    #     if outcome_variable in clfs['versions'][dataset]:
-    #         cols = clfs['versions'][dataset][outcome_variable]
-    #     else:
-    #         print('Outcome {} not in dataset {}'.format(outcome_variable, dataset))
-    #         continue
-    # for testsize in clfs['test_sizes']:
-    X_train, X_test, y_train, y_test = cross_validation.train_test_split(dataset[cols], dataset[outcome_variable], test_size = testsize)
-    # X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
     
-    # Build the ML Regressor/Classifier
-    # if reg_or_clf == 'C':
-    #     trainer_arg = 'Classifier'
-    #     trainer_counter_arg = 'Regressor'
-    # elif reg_or_clf == 'R':
-    #     trainer_arg = 'Regressor'
-    #     trainer_counter_arg = 'Classifier'
-    # for learner in clfs:
-    #     model_dict = {}
-    #     for stats_key in clfs[learner].keys():  
-    #         if stats_key not in results_dataframe:
-    #             results_dataframe[stats_key] = []
-    #             for i in range(model_number - len(results_dataframe[stats_key])):
-    #                 results_dataframe[stats_key].append(np.nan)
-    #         for stat_value in clfs[learner][stats_key]: 
-    #             model_dict[stats_key] = stat_value
-                
-    #             model_number += 1
+    # Split the training data into a training set and a validation set
+    dataset = trainer.now.copy()
+    X_train, X_test, y_train, y_test = cross_validation.train_test_split(dataset[cols], 
+                                                                         dataset[trainer.target], 
+                                                                         test_size = testsize)
+    # Make trainer objects from these.
 
-    #             parameters = {}
-    #             for model_key in model_dict:
-    #                 if model_key in clfs[learner]:
-    #                     if model_dict[model_key]!="NA":
-    #                         parameters[model_key] = model_dict[model_key]
+    newname = ''
+    for split_X in split_list:
+        tag = ''
+        y_array = split_X.replace('X', 'y')
+        test_X = split_X.replace('train', 'test')
+        test_y = y_array.replace('train', 'test')
+        if trainer.target in trainer.impute:
+            tag += '_for'
+            for c in trainer.impute:
+                tag += '_{}'.format(c)
+        new_Y =  '{}_{}_'.format(y_array, trainer.target) + trainer.name + tag
+        new_X =  '{}_{}_'.format(split_X, trainer.target) + trainer.name + tag
+
+        nypd = pd.DataFrame({trainer.target : eval(y_array)})
+        print(nypd.info())
+        print(nypd.shape)
+        print(nypd.isnull().sum())
+        newytrainer = Trainer(new_Y, nypd, trainer.outcome)
+        newytrainer.set_parent(trainer, ModelTrains)
+        try:
+            ModelTrains.add(newytrainer)
+        except:
+            pass
+
+        nxpd = pd.DataFrame(eval(split_X))
+        newxtrainer = Trainer(new_X, nxpd, trainer.outcome)
+        newxtrainer.set_parent(trainer, ModelTrains)
+        try:
+            ModelTrains.add(newxtrainer)
+        except:
+            pass
+
+        new_testY =  '{}_{}_'.format(test_y, trainer.target) + trainer.name + tag
+        new_testX =  '{}_{}_'.format(test_X, trainer.target) + trainer.name + tag
+
+        typd = pd.DataFrame({trainer.target : eval(test_y)})
+        newytester = Trainer(new_testY, typd, trainer.outcome)
+        newytester.set_parent(trainer, ModelTrains)
+        try:
+            ModelTrains.add(newytester)
+        except:
+            pass
+
+        txpd = pd.DataFrame(eval(test_X))
+        newxtester = Trainer(new_testX, txpd, trainer.outcome)
+        newxtester.set_parent(trainer, ModelTrains)
+        try:
+            ModelTrains.add(newxtester)
+        except:
+            pass
+
+        # Join Holdout
+        holdoutset = pd.DataFrame({trainer.target : eval(test_y)})
+        testx = pd.DataFrame(eval(test_X))
+        holdoutset = holdoutset.join(testx)
+        newholdout =  '{}_{}_'.format('HOLDOUT', trainer.target) + trainer.name + tag
+        print(newholdout, '\n', holdoutset.info(verbose=True))
+
+        holdout = Trainer(newholdout, holdoutset, trainer.outcome)
+        holdout.target = trainer.target
+        print(holdout.name, '\n', holdout.now.info(verbose=True))
+        holdout.set_parent(trainer, ModelTrains)
+        try:
+            ModelTrains.add(holdout)
+        except:
+            pass
+
+        # Join Trainer
+        trainerset = pd.DataFrame({trainer.target : eval(y_array)})
+        trainx = pd.DataFrame(eval(split_X))
+        trainerset = trainerset.join(pd.DataFrame(trainx))
+        newtrainer =  '{}_{}_'.format('TRAIN', trainer.target) + trainer.name + tag
+
+        print(newtrainer, '\n', trainerset.info(verbose=True))
+        trainerx = Trainer(newtrainer, trainerset, trainer.outcome, validator = holdout)
+        trainerx.target = trainer.target
+        print(trainerx.name, '\n', trainerx.now.info(verbose=True))
+        trainerx.set_parent(trainer, ModelTrains)
+        newname = newtrainer
+        try:
+            ModelTrains.add(trainerx)
+        except:
+            pass
+
+    ModelTrains.show()
+    XTrain = ModelTrains.get(newname)
+    XVal = XTrain.validator
+    
+    # Make Imputer Children Trainers:
+    # XTrain with medians for any variable that is not the target of imputation.
+    # for impute_var in XTrain.impute:
+    imputation_stats_and_methods = {}
+    XTOR = XTrain.now.copy()
+    while (XTrain.impute > len(imputation_stats_and_methods.keys())):
+        for imputer_var in XTrain.impute:
+            XT = XTOR.copy()
+            XMOD = XTrain.now.copy()
+            XTrain.target = imputer_var
+            XTrain.impute = XTrain.impute.pop(0)
+            imputer, params, cols = splitter(XTrain, ModelTrains, 
+                    models_to_run = ['RFR', 'DTR', 'KNNR', 'KNN', 'DT', 'RF','LR','ET','AB','GB'],
+                    cols=None, exclude_features=None, testsize=0.20, 
+                    results_dataframe=None, regress_only=False,
+                    filename=filename)
+            imputer.set_params(**params)
+            imputation_stats_and_methods[imputer_var] = (imputer, cols)
+            XMOD[imputer_var] = XT[imputer_var]
+            # Split data into cases that reported the imputation feature versus those that didn't
+            have_it = XMOD[XMOD[imputer_var].isnull() == False]
+            print(have_it.shape)
+            dont_have_it = XMOD[XMOD[imputer_var].isnull() == True]
+            dont_have_it.isnull().sum()
+            imputer.fit(have_it[cols], have_it[imputer_var])
+            new_imputations = imputer.predict(dont_have_it[cols])
+            dont_have_it[imputer_var] = new_imputations
+            
+            combined = have_it.append(dont_have_it)
+            XMOD[imputer_var] = combined[imputer_var]
+            # Updatelogs
+            checklog = imputer_var + '_log'
+            if checklog in XMOD.columns.tolist():
+                XMOD[checklog] = XMOD[feature].apply(lambda x: np.log(x) if x > 0 else np.log(x + 1))
+            XTrain.set_data(XMOD.copy())
+            XTrain.imputed = imputer_var
+
+    XTrain.target = outcome_variable
+    XMOD = XTrain.now.copy()
+
+    # Now run thru the loop to get the best clfs.
     print('regress_only?', regress_only)
     model_number = 0
     for index, clf in enumerate([clfs[x] for x in models_to_run]):
         model_dict = {}
         print(models_to_run[index])
         learner = models_to_run[index]
-        # model_dict['learner'] = learner
+        model_dict['learner'] = learner
         parameter_values = grid[models_to_run[index]]
         for p in ParameterGrid(parameter_values):
             model_number += 1
@@ -138,63 +455,53 @@ def splitter(outcome_variable, dataset, models_to_run = ['RFR', 'DTR', 'KNNR', '
                 print(clf)
             except:
                 continue
-            if not regress_only:
-                try:
-                    y_pred_probs = clf.fit(X_train, y_train).predict_proba(X_test)[:,1]
-                    print(precision_at_k(y_test,y_pred_probs,.05))
-                    plot_precision_recall_n(y_test,y_pred_probs,clf)
-                except:
-                    pass
             
-            #threshold = np.sort(y_pred_probs)[::-1][int(.05*len(y_pred_probs))]
-            #print threshold
-            # print(precision_at_k(y_test,y_pred_probs,.05))
-            # plot_precision_recall_n(y_test,y_pred_probs,clf)
+            
             model_dict['Model'] = model_number
             model_dict['Y_outcome'] = outcome_variable
             model_dict['Training_set'] = dataset
             model_dict['Test_size'] = testsize 
             model_dict['Classifier'] = clf       
-            # model_dict[trainer_arg] = learner
-            # model_dict[trainer_counter_arg] = np.nan
+
+            # Modify any remaining missing variables to their medians and Fit.
+            try:
+                estimator = Pipeline([("imputer", Imputer(missing_values=0,
+                                              strategy="median",
+                                              axis=0)),
+                                    (learner, clf)])
+                score = cross_val_score(estimator, X_train, y_train).mean()
+            except:
+                score = np.nan
+                estimator = clf
+
             
-
-            # clf = eval(learner)()
-            # clf_args = clf.get_params()
-            # for param in parameters:
-            #     clf.set_params(**{param:parameters[param]})
-
             #Fit the model to the training inputs and training targets
             model_dict['Predictors'] = cols
-            clf.fit(X_train.as_matrix(), y_train.as_matrix())
+            model_dict['score'] = score
+
+            estimator.fit(X_train, y_train)
 
             #Predict the output on the validation
-            predicted = clf.predict(X_test.as_matrix())
-            
-            mse = get_mse(predicted, y_test.as_matrix())
-             
+            predicted = estimator.predict(X_test)
+            mse = get_mse(predicted, y_test)
             model_dict['metric_score'] = mse
                 
-            score = np.nan
-            
             try:
-                score = clf.score(X_train, y_train, sample_weight=None)
-                model_dict['score'] = score
-                score = model_dict['score']
+                scores = cross_val_score(estimator, X_train, y_test).mean()
+                model_dict['cross_val_metric'] = scores
+                # model_dict['score'] = scores
+                # score = scores
             except:
-                print('Clf gave no score: {}.\nSCORE is :{}'.format(clf, score))
-            try:
-                scores = cross_val_score(clf, X_train, y_train)
-                model_dict['cross_val_metric'] = 'cross_val_score'
-                model_dict['score'] = scores
-                score = scores
-            except:
-                model_dict['cross_val_metric'] = 'NA'
-            model_dict['score'] = score
+                model_dict['cross_val_metric'] = np.nan
             for k in results_dataframe:
-                print(k, results_dataframe[k])
+                print(k, len(results_dataframe[k]))
             for k in model_dict:
                 print(k, model_dict[k])
+            #threshold = np.sort(y_pred_probs)[::-1][int(.05*len(y_pred_probs))]
+            #print threshold
+            print(precision_at_k(y_test,y_pred_probs,.05))
+            # plot_precision_recall_n(y_test,y_pred_probs,clf)
+
             # Sweep up any new or unused results keys into the results dictionary.
             for element in model_dict:
                 if element not in results_dataframe:
@@ -212,40 +519,50 @@ def splitter(outcome_variable, dataset, models_to_run = ['RFR', 'DTR', 'KNNR', '
             results = pd.DataFrame.from_dict(results_dataframe)
             results.to_excel(write_to)
             
-            if model_dict['score'] > best['score']:
-                print('\nMODEL SCORE to beat:', best['score'])
-                best['model_dict'] = None
-                best['score'] = model_dict['score']
-                # best['learner'] = model_dict[learner]
-                best['Classifier'] = model_dict['Classifier']
-                print('\n\tBETTER MODEL!\n')
-                print('Model {}.'.format(model_dict['Model']))
-                for better_result in model_dict:
-                    if better_result != 'Model':
-                        print(better_result, model_dict[better_result])
-                best['model_dict'] = model_dict.copy()
-                best['PARAMETERS'] = clf.get_params()
-                best['model_dict'] = model_dict.copy()
-                try:
-                    importances = clf.feature_importances_
-                    sorted_idx = np.argsort(importances)
-                    padding = np.arange(len(cols)) + 0.5
-                    plt.close('all')
-                    fig, ax = plt.subplots(figsize=(10,8))
-                    t = 'Model {} Imputed {} by {}:\nVariable Importances of {}'.format(model_number, outcome_variable, learner, cols)
-                    doc = '{}_{}_{}_feat_importance.png'.format(filename, model_number, learner)
-                    plt.barh(padding, importances[sorted_idx], align='center')
-                    plt.yticks(padding, cols)
-                    plt.xlabel("Relative Importance")
-                    plt.title(t)
-                    plt.tight_layout()
-                    fig.savefig(doc)
-                except:
-                    print('Clf has no feature_importances_ attribute:') 
+            # if model_dict['score'] > best['score']:
+            #     print('\nMODEL SCORE to beat:', best['score'])
+            #     best['model_dict'] = None
+            #     best['score'] = model_dict['score']
+            #     # best['learner'] = model_dict[learner]
+            #     best['Classifier'] = model_dict['Classifier']
+            #     print('\n\tBETTER MODEL!\n')
+            #     print('Model {}.'.format(model_dict['Model']))
+            #     for better_result in model_dict:
+            #         if better_result != 'Model':
+            #             print(better_result, model_dict[better_result])
+            #     best['model_dict'] = model_dict.copy()
+            #     best['PARAMETERS'] = p
+            #     best['model_dict'] = model_dict.copy()
+            #     try:
+            #         importances = estimator.feature_importances_
+            #         sorted_idx = np.argsort(importances)
+            #         padding = np.arange(len(cols)) + 0.5
+            #         plt.close('all')
+            #         fig, ax = plt.subplots(figsize=(10,8))
+            #         t = 'Model {} Imputed {} by {}:\nVariable Importances of {}'.format(
+            #             model_number, outcome_variable, learner, cols)
+            #         doc = '{}_{}_{}_feat_importance.png'.format(filename, model_number, learner)
+            #         plt.barh(padding, importances[sorted_idx], align='center')
+            #         plt.yticks(padding, cols)
+            #         plt.xlabel("Relative Importance")
+            #         plt.title(t)
+            #         plt.tight_layout()
+            #         fig.savefig(doc)
+            #     except:
+            #         print('Clf has no feature_importances_ attribute:') 
+            if model_dict['cross_val_metric'] > model_dict['cross_val_metric']:
+                print('\n****\tMODEL UPDATE\t*****:')
+                best = replace_best_model(trainer, best, model_dict, estimator, 
+                                          parameters=p, X_train, X_test, y_train, y_test,
+                                          model_number, outcome_variable, 
+                                          learner, 'cross_val_metric', filename=filename)
             
-                # results.to_excel(write_to)
-    
     print('\n\tBEST MODEL!:\n')
     for key in best:
         print(key, best[key])
-    # return pd.DataFrame.from_dict(results_dataframe), best
+    return best['learner'], best['PARAMETERS'], cols
+
+
+
+
+

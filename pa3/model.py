@@ -1,4 +1,7 @@
 from __future__ import division 
+from model import *
+# from mlpipeline_pa3 import list_features_wmissing
+from sklearn import cross_validation
 import os
 import sys
 import pandas as pd
@@ -14,41 +17,43 @@ import requests
 import notebook
 import re
 import seaborn as sns; sns.set(style="ticks", color_codes=True)
-from model import *
-from sklearn import cross_validation
+ 
 # %matplotlib inline
 FIGWIDTH = 10
 FIGHEIGHT = 8
+
+
 
 def inspect_correlations(ModelTrains, filedir='data/plots'):
     '''Produce Correlation Matrices with Nonmissing Traner Objects'''
     plt.close('all')
     nonissing_trainers = []
-    save_this_directory = filedir + '/{}'.format(t.name)
-    save_this_here = save_this_directory + '/correlations'
-    try:
-        os.mkdir(filedir)
-    except:
-        pass
-    try:
-        os.mkdir(save_this_directory)
-    except:
-        pass
-    try:
-        os.mkdir(save_this_here)
-    except:
-        pass
     print('Nonmissing Trainers for Correlations')
     for trainer in ModelTrains.trainers:
+        save_this_directory = filedir + '/{}'.format(trainer.name)
+        save_this_here = save_this_directory + '/correlations'
+        try:
+            os.mkdir(filedir)
+        except:
+            pass
+        try:
+            os.mkdir(save_this_directory)
+        except:
+            pass
+        try:
+            os.mkdir(save_this_here)
+        except:
+            pass
         if trainer.now.isnull().sum().sum() == 0:
-            x, y, z, a = t.get_attributes()
+            x, y, z, a = trainer.get_attributes()
             nonissing_trainers.append(trainer)
+            # fig, axs = plt.subplots(figsize=(12, FIGWIDTH))
             plt.figure(figsize=(12, FIGWIDTH))
             g = sns.corrplot(trainer.now, annot=False)
-            t = "Non-Missing Correlation Matrix of {}, {}".format(trainer.name, t.shape)
-            doc = '{}/{}.png'.format(save_this_directory,'corrplot_{}'.format(t.shape))
-            g.fig.text(0.33, 1.02, t, fontsize=18)
-            g.savefig(doc)
+            t = "Non-Missing Correlation Matrix of {}, {}".format(trainer.name, trainer.shape)
+            doc = '{}/{}.png'.format(save_this_directory,'corrplot_{}'.format(trainer.shape))
+            # g.fig.text(0.33, 1.02, t, fontsize=18)
+            # g.savefig(doc)
             plt.close('all')
     plt.close('all')
 
@@ -209,24 +214,51 @@ class Trainer(object):
     def __init__(self, name, dataframe, outcome_name, validator = None, ModelTrainIndex = None, parent = None):
         self._name = name
         # self._data, self.features = self._makeData(dataframe)
-        self.__data_original = dataframe.copy()
-        self.__last_version = dataframe.copy()
-        self._data = dataframe.copy()
+        self.__data_original = self.__makeData(dataframe)
+        self.__last_version = self.__makeData(dataframe)
+        self._data = self.__makeData(dataframe)
         self._features = self._data.columns.tolist()
         self._outcome = outcome_name
         self._target = outcome_name
         self._changes = 0
-        self._toimpute = None # Made optional for broader application.
+        self._median = {}
+        self._toimpute = [] 
+        self._missings = self.__updateMissings()
+        self._transformed = {}
+        self._transformations = []
         self._parent = parent
         self._number = ModelTrainIndex
         self._children = []
         self._validator = validator
+        self._imputed = []
+        self._best_estimators = {}
 
     
     @property
     def name(self):
         '''Returns the Trainer's name id.'''
         return self._name
+
+
+    @property
+    def best(self):
+        '''Get this Trainer's dictionary of 
+        best classifiers obtained for any modelling target
+        that has been obtained from these Trainer data.'''
+        return self._best_estimators
+    
+
+    @best.setter
+    def best(self, pair):
+        '''Set a key and estimator model in the best models dict'''
+        if isinstance(pair, (tuple, list)):
+            self._best_estimators[pair[0]] = pair[1]
+        elif isinstance(pair, dict):
+            key = pair.keys().tolist()[0]
+            self._best_estimators[key] = pair[key]
+        else:
+            raise ValueError('Must pass a binary tuple, list, or dictionary')
+
 
     @property
     def id(self):
@@ -258,9 +290,9 @@ class Trainer(object):
         '''
         Sets the feature that is the Trainer's 
         current modelling target.'''
-        if c not in self._data.columns.tolist():
+        if newtarget not in self._data.columns.tolist():
             raise ValueError("{} is not a feature of Trainer object! \
-                            So it can't be a target.".format(c))
+                            So it can't be a target.".format(newtarget))
         self._target = newtarget
 
     @property
@@ -268,11 +300,13 @@ class Trainer(object):
         '''Returns the Trainer's current hold out set.'''
         return self._validator
 
+
     @validator.setter
     def validator(self, newtrainer):
         '''Set's the Trainer's hold out set.'''
         if isinstance(newtrainer, Trainer):
             self._validator = newtrainer
+
 
     @property
     def parent(self):
@@ -302,22 +336,86 @@ class Trainer(object):
 
 
     @property
-    def toimpute(self):
-        '''
-        Returns the list column names that require imputation.'''
-        if self._toimpute:
-            return self._toimpute
+    def impute(self):
+        '''Returns the list column names that require special imputation.'''
+        return self._toimpute
 
-    @toimpute.setter
-    def toimpute(self, column_list):
-        '''Define the features that require imputation'''
+    @impute.setter
+    def impute(self, column_list):
+        '''Define the features that require imputation modelling'''
         if isinstance(column_list, list):
             for c in column_list:
                 if c not in self._data.columns.tolist():
                     raise ValueError("{} is not a feature of Trainer object!".format(c))
-            self._toimpute = column_list
+                elif self._data[c].isnull().sum().sum() == 0:
+                    raise ValueError("{} has no missing to impute in {}!".format(c, self._name))
+                else:
+                    self._toimpute = column_list
         else:
-            raise ValueError("Imputation candidates must be a list of strings.")
+            raise ValueError("Imputation candidates must be a list of column strings.")
+        self.__updateMissings()
+
+
+    @property
+    def imputed(self):
+        '''Returns the list column names that have been fit and imputed.'''
+        return self._imputed
+
+    @imputed.setter
+    def imputed(self, name):
+        '''Add feature to a list of imputed features.'''
+        if name not in self._data.columns.tolist():
+            raise ValueError("{} is not a feature of Trainer object!".format(name))
+        elif self._data[c].isnull().sum().sum() > 0:
+            raise ValueError("{} has HAS MISSING DATA STILL to impute in {}!".format(name, self._name))
+        else:
+            self._imputed.append(name) 
+        self._missings = self.__updateMissings()
+
+    
+    @property
+    def missing(self):
+        '''Return a list columns with missing data that are 
+        not already staged for imputation modelling.'''
+        self._missings = self.__updateMissings()
+        return self._missings
+
+
+    def __updateMissings(self):
+        '''Updates the record of columns with missing values.'''
+        has_missings = self.list_features_wmissing(self._data)
+        missings_list = []
+        for c in has_missings:
+            if c not in self.impute:
+                missings_list.append(c)
+        return missings_list
+
+
+    @property
+    def transformed(self):
+        '''
+        Returns the dictionary of transformed 
+        features to their respective transformation features.'''
+        if self._transformed:
+            return self._transformed
+
+    def transform(self, pair):
+        '''
+        Maps the features to the features that are its transformations 
+        in order to identify invalid intercorrelations.'''
+        if isinstance(pair, dict):
+            for k in pair.keys():
+                if k in self._data.columns:
+                    if k not in self._transformed.keys():
+                        self._transformed[k] = pair[k]
+                    else:
+                        print("Adding {} to list of {} transformations {}.".format(pair[k], k, self._transformed[k]))
+                        if isinstance(self._transformed[k], str):
+                            self._transformed[k] = [self._transformed[k]]
+                        self._transformed[k].append(pair[k])
+                else:
+                    raise KeyError("{} is not a feature of {}.".format(k, self._name))
+
 
     @property
     def children(self):
@@ -347,6 +445,16 @@ class Trainer(object):
                     if name == child.name:
                         child_list.append(child)
         return child_list
+
+    
+    def __makeData(self, dataframe):
+        '''Constuctor for initializing Trainer data.'''
+        if not isinstance(dataframe, pd.DataFrame):
+            raise ValueError("Data must be passed in a dataframe!")
+        else:
+            return dataframe.copy()
+
+
 
     
     @property
@@ -417,8 +525,22 @@ class Trainer(object):
               \tSum of Nulls: \n{}\n\
               \tReturning >> Name, Outcome, Target, Parent\n'.\
               format(self._name, self.shape, self.id, parental_name, parental_shape, children_names,
-                    self._outcome, self._target, self.nulls))
+                    self._outcome, self._target, self.nulls()))
         return self._name, self._outcome, self._target, parental_object
+
+    @staticmethod
+    def list_features_wmissing(dataset):
+        '''
+        Return all features that have missing values:
+            - a list of just those features.'''
+        print('Summary Statistics on Full Data set:\n{}'.format(dataset.describe(include='all').round(2)))
+        has_null = pd.DataFrame({'Total_missings' : dataset.isnull().sum()})
+        has_null[(has_null.Total_missings >0)].index.tolist()
+        print('\n\n{} Features containing missing values: {}\n'
+              .format(len(has_null[(has_null.Total_missings >0)].index.tolist()),
+               has_null[(has_null.Total_missings >0)].index.tolist()))
+        print(has_null.ix[2:,:])
+        return has_null[(has_null.Total_missings >0)].index.tolist()
 
 
 class ModelTrains(object):
@@ -643,8 +765,16 @@ class ModelTrains(object):
         if isinstance(newtrainer, Trainer):
             for t in trainer_list:
                 if t.now.equals(newtrainer.now):
-                    raise ValueError("\nRedundant! {} already contains this data.".format(t.name))
+                    raise ValueError("\n{} Redundant! {} already contains this data.".format(newtrainer.name, t.name))
                     return
             newtrainer.id = len(trainer_list)
             self._trainers.append(newtrainer)
+
+    def show(self):
+        '''
+        Print Trainers
+        '''
+        print('\nCURRENT TRAINER OBJECTS')
+        for i in self._trainers:
+            print(i.name, i.shape, '#{}'.format(i.id))
 
