@@ -204,10 +204,20 @@ def decode_and_drop_missings(trainer, ModelTrains, decodings_dict, except_thresh
     # Corrected dataset with all missings in place. Stage as Trainer.
     Tdecode = Trainer('FULL_MISS', raw_train, trainer.outcome)
     Tdecode.set_parent(trainer, ModelTrains)
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> 316feea342fec16110240f43f12cc657cc8b9a3d
     try:
         ModelTrains.add(Tdecode)  
     except:
         pass 
+<<<<<<< HEAD
+=======
+=======
+    ModelTrains.add(Tdecode)
+>>>>>>> b03c6e05dcda2f6fd6961d9b2a3185f2dec10593
+>>>>>>> 316feea342fec16110240f43f12cc657cc8b9a3d
     
 
     # Derive binary missing indicator variables
@@ -219,6 +229,10 @@ def decode_and_drop_missings(trainer, ModelTrains, decodings_dict, except_thresh
             inspect_missing_list += [feature]
             is_missing_var = feature + '_missing'
             derived_train[is_missing_var] = derived_train[feature].isnull().map({True : 1, False : 0})
+<<<<<<< HEAD
+    Tim = Trainer('FULL_ISMISS', derived_train, Tdecode.outcome)
+=======
+<<<<<<< HEAD
     Tim = Trainer('FULL_ISMISS', derived_train, Tdecode.outcome)
     Tim.set_parent(Tdecode, ModelTrains)
     try:
@@ -238,14 +252,49 @@ def decode_and_drop_missings(trainer, ModelTrains, decodings_dict, except_thresh
         ModelTrains.add(Tcol)  
     except:
         pass 
+=======
+    Tim = Trainer('FULL_ISMISS', derived_train.copy(), Tdecode.outcome)
+>>>>>>> 316feea342fec16110240f43f12cc657cc8b9a3d
+    Tim.set_parent(Tdecode, ModelTrains)
+    try:
+        ModelTrains.add(Tim)  
+    except:
+        pass 
+
+    # Drop all missings
+    if isinstance(outcome_variable, str):
+        outcome_variable = [outcome_variable]
+
+    X = Tim.now.copy()
+    X.dropna(how='any', axis=1, inplace=True)
+    Tcol = Trainer('COL_DROP', X, Tim.outcome)
+    Tcol.set_parent(Tim, ModelTrains)
+<<<<<<< HEAD
+    try:
+        ModelTrains.add(Tcol)  
+    except:
+        pass 
+=======
+    ModelTrains.add(Tcol)   
+>>>>>>> b03c6e05dcda2f6fd6961d9b2a3185f2dec10593
+>>>>>>> 316feea342fec16110240f43f12cc657cc8b9a3d
     
     dropped_train =  drop_obs_w_anynan(Tdecode.now.copy(), encoded_features).copy()
     Trow = Trainer('ROW_DROP', dropped_train, Tdecode.outcome)
     Trow.set_parent(Tdecode, ModelTrains)
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> 316feea342fec16110240f43f12cc657cc8b9a3d
     try:
         ModelTrains.add(Trow)  
     except:
         pass 
+<<<<<<< HEAD
+=======
+=======
+>>>>>>> b03c6e05dcda2f6fd6961d9b2a3185f2dec10593
+>>>>>>> 316feea342fec16110240f43f12cc657cc8b9a3d
     for i in ModelTrains.trainers:
         print(i.name, i.shape, i)
     return inspect_missing_list
