@@ -1,15 +1,6 @@
 from __future__ import division 
-<<<<<<< HEAD
 from model import *
 from sklearn import cross_validation
-=======
-<<<<<<< HEAD
-from model import *
-# from mlpipeline_pa3 import list_features_wmissing
-from sklearn import cross_validation
-=======
->>>>>>> b03c6e05dcda2f6fd6961d9b2a3185f2dec10593
->>>>>>> 316feea342fec16110240f43f12cc657cc8b9a3d
 import os
 import sys
 import pandas as pd
@@ -30,65 +21,12 @@ import seaborn as sns; sns.set(style="ticks", color_codes=True)
 FIGWIDTH = 10
 FIGHEIGHT = 8
 
-<<<<<<< HEAD
 
 
-=======
-<<<<<<< HEAD
-
-
-=======
->>>>>>> b03c6e05dcda2f6fd6961d9b2a3185f2dec10593
->>>>>>> 316feea342fec16110240f43f12cc657cc8b9a3d
 def inspect_correlations(ModelTrains, filedir='data/plots'):
     '''Produce Correlation Matrices with Nonmissing Traner Objects'''
     plt.close('all')
     nonissing_trainers = []
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-    print('Nonmissing Trainers for Correlations')
-    for trainer in ModelTrains.trainers:
-        save_this_directory = filedir + '/{}'.format(trainer.name)
-        save_this_here = save_this_directory + '/correlations'
-        try:
-            os.mkdir(filedir)
-        except:
-            pass
-        try:
-            os.mkdir(save_this_directory)
-        except:
-            pass
-        try:
-            os.mkdir(save_this_here)
-        except:
-            pass
-        if trainer.now.isnull().sum().sum() == 0:
-            x, y, z, a = trainer.get_attributes()
-            nonissing_trainers.append(trainer)
-            # fig, axs = plt.subplots(figsize=(12, FIGWIDTH))
-            plt.figure(figsize=(12, FIGWIDTH))
-            g = sns.corrplot(trainer.now, annot=False)
-            t = "Non-Missing Correlation Matrix of {}, {}".format(trainer.name, trainer.shape)
-            doc = '{}/{}.png'.format(save_this_directory,'corrplot_{}'.format(trainer.shape))
-            # g.fig.text(0.33, 1.02, t, fontsize=18)
-            # g.savefig(doc)
-=======
-    save_this_directory = filedir + '/{}'.format(t.name)
-    save_this_here = save_this_directory + '/correlations'
-    try:
-        os.mkdir(filedir)
-    except:
-        pass
-    try:
-        os.mkdir(save_this_directory)
-    except:
-        pass
-    try:
-        os.mkdir(save_this_here)
-    except:
-        pass
->>>>>>> 316feea342fec16110240f43f12cc657cc8b9a3d
     print('Nonmissing Trainers for Correlations')
     for trainer in ModelTrains.trainers:
         save_this_directory = filedir + '/{}'.format(trainer.name)
@@ -115,7 +53,6 @@ def inspect_correlations(ModelTrains, filedir='data/plots'):
             doc = '{}/{}.png'.format(save_this_directory,'corrplot_{}'.format(trainer.shape))
             # g.fig.text(0.33, 1.02, t, fontsize=18)
             g.savefig(doc)
->>>>>>> b03c6e05dcda2f6fd6961d9b2a3185f2dec10593
             plt.close('all')
     plt.close('all')
 
@@ -283,21 +220,11 @@ class Trainer(object):
         self._outcome = outcome_name
         self._target = outcome_name
         self._changes = 0
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> 316feea342fec16110240f43f12cc657cc8b9a3d
         self._median = {}
         self._toimpute = [] 
         self._missings = self.__updateMissings()
         self._transformed = {}
         self._transformations = []
-<<<<<<< HEAD
-=======
-=======
-        self._toimpute = None # Made optional for broader application.
->>>>>>> b03c6e05dcda2f6fd6961d9b2a3185f2dec10593
->>>>>>> 316feea342fec16110240f43f12cc657cc8b9a3d
         self._parent = parent
         self._number = ModelTrainIndex
         self._children = []
@@ -842,10 +769,6 @@ class ModelTrains(object):
             newtrainer.id = len(trainer_list)
             self._trainers.append(newtrainer)
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> 316feea342fec16110240f43f12cc657cc8b9a3d
     def show(self):
         '''
         Print Trainers
@@ -854,8 +777,3 @@ class ModelTrains(object):
         for i in self._trainers:
             print(i.name, i.shape, '#{}'.format(i.id))
 
-<<<<<<< HEAD
-=======
-=======
->>>>>>> b03c6e05dcda2f6fd6961d9b2a3185f2dec10593
->>>>>>> 316feea342fec16110240f43f12cc657cc8b9a3d
