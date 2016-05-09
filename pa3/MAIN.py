@@ -35,8 +35,12 @@ T = Delinquency.get(DATA[2][0])
 # Deal with missing values.
 # Collect candidates for imputations of missings. 
 feature_wnull = list_features_wmissing(T.now.copy())
+<<<<<<< HEAD
 print('\n', T.name, 'Correlates\n', T.now.columns)
 correlated_features = get_correlates_dict(T, feature_wnull, output_variable=T.outcome)
+=======
+correlated_features = get_correlates_dict(T.now.copy(), feature_wnull, output_variable=T.outcome)
+>>>>>>> b03c6e05dcda2f6fd6961d9b2a3185f2dec10593
 decodings_dict = {0 :{'on': None, 'to_replace' : [96, 98],
                   'with_replace' : [np.nan, np.nan]},
                   1:{'on': ['age'],
@@ -59,6 +63,7 @@ decode_and_drop_missings(T, Delinquency,
 
 print('\nSummarized Data After Removing Cases with Missing Values:\n')
 inspect_correlations(Delinquency)
+<<<<<<< HEAD
 
 # Save tracer datasets as Trainer objects.(name, dataframe, outcome_name, validator = None, ModelTrainIndex = None))
 transform_features_dict = {'RevolvingUtilizationOfUnsecuredLines' : 'log',
@@ -73,6 +78,12 @@ dropped_columns_correlates = \
 get_correlates_dict(Delinquency.get('COL_DROP_log'),
                     Delinquency.get('COL_DROP_log').now.columns,
                     not_same=True, output_variable=Delinquency.get('COL_DROP_log').outcome)
+=======
+# Trow = Delinquency.get('ROW_DROP')
+# Trow.now.describe(include='all').round(2)
+
+# Save tracer datasets as Trainer objects.(name, dataframe, outcome_name, validator = None, ModelTrainIndex = None))
+>>>>>>> b03c6e05dcda2f6fd6961d9b2a3185f2dec10593
 
 dropped_rows_correlates = \
 get_correlates_dict(Delinquency.get('ROW_DROP_log'),

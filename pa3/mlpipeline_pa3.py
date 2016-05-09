@@ -204,10 +204,14 @@ def decode_and_drop_missings(trainer, ModelTrains, decodings_dict, except_thresh
     # Corrected dataset with all missings in place. Stage as Trainer.
     Tdecode = Trainer('FULL_MISS', raw_train, trainer.outcome)
     Tdecode.set_parent(trainer, ModelTrains)
+<<<<<<< HEAD
     try:
         ModelTrains.add(Tdecode)  
     except:
         pass 
+=======
+    ModelTrains.add(Tdecode)
+>>>>>>> b03c6e05dcda2f6fd6961d9b2a3185f2dec10593
     
 
     # Derive binary missing indicator variables
@@ -219,6 +223,7 @@ def decode_and_drop_missings(trainer, ModelTrains, decodings_dict, except_thresh
             inspect_missing_list += [feature]
             is_missing_var = feature + '_missing'
             derived_train[is_missing_var] = derived_train[feature].isnull().map({True : 1, False : 0})
+<<<<<<< HEAD
     Tim = Trainer('FULL_ISMISS', derived_train, Tdecode.outcome)
     Tim.set_parent(Tdecode, ModelTrains)
     try:
@@ -238,14 +243,38 @@ def decode_and_drop_missings(trainer, ModelTrains, decodings_dict, except_thresh
         ModelTrains.add(Tcol)  
     except:
         pass 
+=======
+    Tim = Trainer('FULL_ISMISS', derived_train.copy(), Tdecode.outcome)
+    Tim.set_parent(Tdecode, ModelTrains)
+    ModelTrains.add(Tim)
+
+    # Drop all missings
+    if isinstance(outcome_variable, str):
+        outcome_variable = list(outcome_variable)
+
+    x = Tim.now.copy()
+    if outcome_variable:
+        dropping_columns = [c for c in Tim.now.columns.tolist() if c not in outcome_variable]
+        # derived_train.dropna(how='any', axis=1, subset=[dropping_columns]).copy()
+        x.dropna(how='any', axis=1, subset=[dropping_columns])
+        Tcol = Trainer('COL_DROP', x, Tim.outcome)
+    else:
+        x.dropna(how='any', axis=1)
+        Tcol = Trainer('COL_DROP', x, Tim.outcome)
+    Tcol.set_parent(Tim, ModelTrains)
+    ModelTrains.add(Tcol)   
+>>>>>>> b03c6e05dcda2f6fd6961d9b2a3185f2dec10593
     
     dropped_train =  drop_obs_w_anynan(Tdecode.now.copy(), encoded_features).copy()
     Trow = Trainer('ROW_DROP', dropped_train, Tdecode.outcome)
     Trow.set_parent(Tdecode, ModelTrains)
+<<<<<<< HEAD
     try:
         ModelTrains.add(Trow)  
     except:
         pass 
+=======
+>>>>>>> b03c6e05dcda2f6fd6961d9b2a3185f2dec10593
     for i in ModelTrains.trainers:
         print(i.name, i.shape, i)
     return inspect_missing_list
