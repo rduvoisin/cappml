@@ -1,3 +1,6 @@
+from __future__ import division 
+from model import *
+from sklearn import cross_validation
 import os
 import sys
 import pandas as pd
@@ -12,25 +15,111 @@ import json
 import requests
 import notebook
 import re
-import seaborn as sns; sns.set(style="ticks", color_codes=True)
-from model import *
-from sklearn import cross_validation
+import seaborn as sns; sns.set(context="paper", style="darkgrid", color_codes=True)
+ 
 # %matplotlib inline
-FIGWIDTH = 10
-FIGHEIGHT = 8
+FIGWIDTH = 12
+FIGHEIGHT = 10
 
-def inspect_pairplot(trainer, filedir='data/plots', inspect=None, FIGWIDTH=FIGWIDTH, FIGHEIGHT=FIGHEIGHT):
+
+
+def inspect_correlations(ModelTrains, filedir='data/plots', FIGWIDTH=FIGWIDTH, FIGHEIGHT=FIGHEIGHT):
+    '''Produce Correlation Matrices with Nonmissing Trainer Objects'''
+    plt.close('all')
+    nonissing_trainers = []
+    for trainer in ModelTrains.trainers:
+        save_this_directory = filedir + '/{}'.format(trainer.name)
+        save_this_here = save_this_directory + '/correlations'
+        try:
+            os.mkdir(filedir)
+        except:
+            pass
+        try:
+            os.mkdir(save_this_directory)
+        except:
+            pass
+        try:
+            os.mkdir(save_this_here)
+        except:
+            pass
+        try:
+            plt.close('all')
+            # Compute the correlation matrix
+            corr = trainer.now.corr()
+            # Generate a mask for the upper triangle
+            mask = np.zeros_like(corr, dtype=np.bool)
+            mask[np.triu_indices_from(mask)] = True
+            # Set up the matplotlib figure
+            fig, axs = plt.subplots(figsize=(FIGWIDTH, FIGHEIGHT))
+            # Generate a custom diverging colormap
+            cmap = sns.diverging_palette(220, 10, as_cmap=True)
+            # Draw the heatmap with the mask and correct aspect ratio
+            # with sns.axes_style("white"):
+            #     g = sns.heatmap(corr, mask=mask, cmap=cmap, cbar_ax=1, 
+            #                     vmax=.3, square=True, cbar=True,
+            #                     cbar_kws={"shrink": .5}, linewidths=.5)
+            # g = sns.heatmap(corr, mask=mask, cmap=cmap, vmax=.3,
+            #             square=True, xticklabels=5, yticklabels=5,
+            #             linewidths=.5, cbar_kws={"shrink": .5}, 
+            #             legend_out=True, ax=axs)
+            g = sns.corrplot(trainer.now, annot=False, diag_names=False)
+            doc = save_this_here + '/matrix_{}_{}.png'.format(trainer.name, trainer.id)
+            t = '\n{}\n(Anti)Correlation Matrix\n{}'.format(trainer.name, 
+                                                            trainer.shape)
+            plt.title(t, fontsize=12)
+            plt.tight_layout()
+            fig.savefig(doc)
+            plt.close('all')
+        except:
+            pass
+        if trainer.now.isnull().sum().sum() == 0:
+            plt.close('all')
+            # x, y, z, a = trainer.get_attributes()
+            nonissing_trainers.append(trainer)
+            fig, axs = plt.subplots(figsize=(FIGWIDTH, FIGWIDTH))
+            # plt.figure(figsize=())
+
+            g = sns.corrplot(trainer.now, annot=False, diag_names=False)
+            t = "\n{}\nNon-Missing Only Correlation Matrix,\n{}".format(trainer.name, 
+                                                                        trainer.shape)
+            doc = '{}/{}.png'.format(save_this_directory,'corrplot_{}_{}'.format(trainer.name, 
+                                                                                 trainer.id))
+            # g.add_legend()
+
+            plt.title(t)
+            plt.tight_layout()
+            fig.savefig(doc)
+            plt.close('all')
+    plt.close('all')
+
+
+
+def inspect_pairplot(trainer, descriptor=None, filedir='data/plots', 
+                    x_vars=None, y_vars=None, 
+                    inspect=None, size=None):
     '''Produce pairwise histograms'''
+    plt.close('all')
     if not inspect:
         inspect = trainer.now.columns.tolist()
     if trainer.target not in inspect:
         inspect.append(trainer.target) 
-
-    x = len(inspect)/len(trainer.now.columns.tolist())
-    seapair = sns.pairplot(data=trainer.now[inspect].dropna(), hue = trainer.target)
-    save_this_directory = filedir + '/{}'.format(trainer.name)
-    save_this_here = save_this_directory
+    x = len(inspect)
+    # if not size:
+    #     size = x 
+    #     aspect = 1
     
+    fig, axs = plt.subplots(figsize=(FIGWIDTH, FIGWIDTH))
+    # g = sns.pairplot(data=trainer.now[inspect].dropna(), diag_kind="hist",
+    #                  x_vars=x_vars, y_vars=y_vars, 
+    #                  hue = trainer.target, palette="Set1")
+    try:
+        g = sns.pairplot(iris, diag_kind="kde", markers="+",
+                        plot_kws=dict(s=50, edgecolor="b", linewidth=1),
+                        diag_kws=dict(shade=True))
+    except:
+        pass
+    save_this_directory = filedir + '/{}'.format(trainer.name)
+    save_this_here = save_this_directory + '/correlations'
     try:
         os.mkdir(filedir)
     except:
@@ -43,48 +132,80 @@ def inspect_pairplot(trainer, filedir='data/plots', inspect=None, FIGWIDTH=FIGWI
         os.mkdir(save_this_here)
     except:
         pass
-    
-    t = "Distributions of {} features by {}".format(x, trainer.target)
-    # sns.title(t)
-    doc = '{}/{}.png'.format(save_this_here,'pair_plot_{}'.format(x))
-    # seapair.gcf().tight_layout()
-    seapair.savefig(doc) 
+    if descriptor:
+        desc = descriptor.replacer
+    try:
+        t = "\nDistributions of {}/{} features by {}\n on {}".format(x, 
+                                                                len(trainer.now.columns.tolist()), 
+                                                                trainer.target,
+                                                                trainer.name)
+        doc = '{}/{}.png'.format(save_this_here,'pair_plot_{}_features'.format(x))
+
+        plt.title(t)
+        plt.tight_layout()
+        g.savefig(doc) 
+        plt.close('all')
+    except:
+        pass
 
 
 def inspect_zeros(trainer, filedir, inspect=None, FIGWIDTH=FIGWIDTH, FIGHEIGHT=FIGHEIGHT):
     '''Produce side-by-side log histograms.'''
+    plt.close()
     complete = []
     D = trainer.now.copy()
     if not inspect:
         inspect = D.columns.tolist()
+    save_this_directory = filedir + '/{}'.format(trainer.name)
+    save_this_here = save_this_directory + '/zeros'
+    try:
+        os.mkdir(filedir)
+    except:
+        pass
+    try:
+        os.mkdir(save_this_directory)
+    except:
+        pass
+    try:
+        os.mkdir(save_this_here)
+    except:
+        pass
     for feature in inspect:
+        print('Inspect {} for Zeros'.format(feature))
+        plt.close()
         for x in inspect:
             if x != feature and (x, feature) not in complete:
                 compare = (x, feature)
                 complete += [compare]
-                fig, axs = plt.subplots(figsize=(FIGWIDTH, FIGHEIGHT))
-                np.log1p(D[D[feature] == 0][x]).hist(bins=30, label ='{} == 0'.format(feature), normed=True)
-                np.log1p(D[D[feature] > 0][x]).hist(bins=30, label ='{} > 0'.format(feature), normed=True).legend(loc='upper right')
-                save_this_directory = filedir + '/{}'.format(trainer.name)
-                save_this_here = save_this_directory + '/zeros'
                 try:
-                    os.mkdir(filedir)
+                    fig, axs = plt.subplots(figsize=(FIGWIDTH, FIGHEIGHT))
+                    np.log1p(D[D[feature] == 0][x]).hist(bins=30, label ='{} == 0'.format(feature), normed=True)
+                    np.log1p(D[D[feature] > 0][x]).hist(bins=30, label ='{} > 0'.format(feature), normed=True).legend(loc='upper right')
+                    t = "Log {} | {} = Zero.".format(x, feature)
+                    plt.title(t)
+                    axs.grid(False)
+                    doc = '{}/{}.png'.format(save_this_here,'inspect_{}_when_{}_zero'.format(x, feature))
+                    plt.tight_layout()
+                    plt.savefig(doc) 
                 except:
+                    plt.close('all')
                     pass
-                try:
-                    os.mkdir(save_this_directory)
-                except:
-                    pass
-                try:
-                    os.mkdir(save_this_here)
-                except:
-                    pass
-                t = "Log {} when {} Equal to vs. Greater than zero.".format(x, feature)
-                plt.title(t)
-                axs.grid(False)
-                doc = '{}/{}.png'.format(save_this_here,'inspect_{}_when_{}_zero'.format(x, feature))
-                plt.gcf().tight_layout()
-                plt.savefig(doc) 
+                plt.close()
+        
+        fig, axs = plt.subplots(figsize=(FIGWIDTH, FIGHEIGHT)) 
+        tag = '{}_pairplot_when_zero'.format(feature)
+        t = "General Distribution | {} = Zero.".format(feature)
+        doc = '{}/{}.png'.format(save_this_here, tag)  
+        try:
+            g = sns.pairplot(data=D[D[feature]==0][inspect].dropna(), 
+                             hue = trainer.target, palette="Set1", ax=axs)
+            plt.title(t)
+            plt.tight_layout()
+            fig.savefig(doc) 
+        except:
+            plt.close('all')
+            pass
+        plt.close('all')
 
 
 def read_data(filename, to='pandas', holdout_size = False, drop_column = False):
@@ -99,8 +220,7 @@ def read_data(filename, to='pandas', holdout_size = False, drop_column = False):
     Returns:
       (list of strings, pandas dataframe)
     '''
-    # DF.drop([DF.columns[[0, 1, 3]]], axis=1) # Note: zero indexed
-    # DF.drop('column_name', axis=1, inplace=True)
+
     if to == 'pandas':
         data = pd.read_csv(filename)
         if isinstance(drop_column, int):
@@ -123,8 +243,6 @@ def read_data(filename, to='pandas', holdout_size = False, drop_column = False):
             else:
                 TRAIN = data.copy()
                 HOLDOUT = pd.DataFrame()
-                # if drop_column:
-                #     del TRAIN[TRAIN.columns[drop_column]]
     return labels, TRAIN, data, HOLDOUT
 
 
@@ -139,27 +257,53 @@ class Trainer(object):
         * optionally a validation DataFrame
     '''
     
-    def __init__(self, name, dataframe, outcome_name, validator = None, ModelTrainIndex = None):
+    def __init__(self, name, dataframe, outcome_name, validator = None, ModelTrainIndex = None, parent = None):
         self._name = name
         # self._data, self.features = self._makeData(dataframe)
-        self.__data_original = dataframe.copy()
-        self.__last_version = dataframe.copy()
-        self._data = dataframe.copy()
+        self.__data_original = self.__makeData(dataframe)
+        self.__last_version = self.__makeData(dataframe)
+        self._data = self.__makeData(dataframe)
         self._features = self._data.columns.tolist()
         self._outcome = outcome_name
         self._target = outcome_name
         self._changes = 0
-        self._toimpute = None # Made optional for broader application.
-        self._parent = None
+        self._median = {}
+        self._toimpute = [] 
+        self._missings = self.__updateMissings()
+        self._transformed = {}
+        self._transformations = []
+        self._parent = parent
         self._number = ModelTrainIndex
         self._children = []
         self._validator = validator
+        self._imputed = []
+        self._best_estimators = {}
 
     
     @property
     def name(self):
         '''Returns the Trainer's name id.'''
         return self._name
+
+
+    @property
+    def best(self):
+        '''Get this Trainer's dictionary of 
+        best classifiers obtained for any modelling target
+        that has been obtained from these Trainer data.'''
+        return self._best_estimators
+    
+
+    def set_best(self, pair):
+        '''Set a key and estimator model in the best models dict'''
+        if isinstance(pair, (tuple, list)):
+            self._best_estimators[pair[0]] = pair[1]
+        elif isinstance(pair, dict):
+            key = pair.keys().tolist()[0]
+            self._best_estimators[key] = pair[key]
+        else:
+            raise ValueError('Must pass a binary tuple, list, or dictionary')
+
 
     @property
     def id(self):
@@ -191,9 +335,9 @@ class Trainer(object):
         '''
         Sets the feature that is the Trainer's 
         current modelling target.'''
-        if c not in self._data.columns.tolist():
+        if newtarget not in self._data.columns.tolist():
             raise ValueError("{} is not a feature of Trainer object! \
-                            So it can't be a target.".format(c))
+                            So it can't be a target.".format(newtarget))
         self._target = newtarget
 
     @property
@@ -201,11 +345,13 @@ class Trainer(object):
         '''Returns the Trainer's current hold out set.'''
         return self._validator
 
+
     @validator.setter
     def validator(self, newtrainer):
         '''Set's the Trainer's hold out set.'''
         if isinstance(newtrainer, Trainer):
             self._validator = newtrainer
+
 
     @property
     def parent(self):
@@ -215,11 +361,11 @@ class Trainer(object):
         if self._parent:
             return self._parent
 
-    @parent.setter
-    def parent(self, newparent):
-        '''Defines the parent Trainer'''
+    def set_parent(self, newparent, ModelTrains):
+        '''Defines the parent Trainer and adds as Child of parent'''
         if isinstance(newparent, Trainer):
             self._parent = newparent
+            ModelTrains.get(newparent.name).add_child(ModelTrains.get(self._name))
         else:
             raise ValueError("Parent must also be a Trainer object!")
     
@@ -229,34 +375,112 @@ class Trainer(object):
         return self._data.shape
 
    
-    @property
     def nulls(self):
         '''Returns a series of Trainer object's sums of null data.'''
         return self._data.isnull().sum()
 
 
     @property
-    def toimpute(self):
-        '''
-        Returns the list column names that require imputation.'''
-        if self._toimpute:
-            return self._toimpute
+    def impute(self):
+        '''Returns the list column names that require special imputation.'''
+        return self._toimpute
 
-    @toimpute.setter
-    def toimpute(self, column_list):
-        '''Define the features that require imputation'''
+    @impute.setter
+    def impute(self, column_list):
+        '''Define the features that require imputation modelling'''
+        if isinstance(column_list, str):
+            column_list = [column_list]
         if isinstance(column_list, list):
             for c in column_list:
                 if c not in self._data.columns.tolist():
-                    raise ValueError("{} is not a feature of Trainer object!".format(c))
-            self._toimpute = column_list
+                    print("{} is not a feature of Trainer object!".format(c))
+                    pass
+                elif self._data[c].isnull().sum().sum() == 0:
+                    raise ValueError("{} has no missing to impute in {}!".format(c, self._name))
+                else:
+                    self._toimpute = column_list
         else:
-            raise ValueError("Imputation candidates must be a list of strings.")
+            raise ValueError("Imputation candidates must be a list of column strings.")
+        self.__updateMissings()
+
+
+    @property
+    def imputed(self):
+        '''Returns the list column names that have been fit and imputed.'''
+        return self._imputed
+
+
+    @imputed.setter
+    def imputed(self, name):
+        '''Add feature to a list of imputed features.'''
+        if name not in self._data.columns.tolist():
+            raise ValueError("{} is not a feature of Trainer object!".format(name))
+        elif self._data[c].isnull().sum().sum() > 0:
+            raise ValueError("{} has HAS MISSING DATA STILL to impute in {}!".format(name, self._name))
+        else:
+            self._imputed.append(name) 
+        self._missings = self.__updateMissings()
+
+    
+    @property
+    def missings(self):
+        '''Return a list columns with missing data that are 
+        not already staged for imputation modelling.'''
+        self._missings = self.__updateMissings()
+        return self._missings
+
+
+    def __updateMissings(self):
+        '''Updates the record of columns with missing values.'''
+        has_missings = self.list_features_wmissing(self._data)
+        missings_list = []
+        for c in has_missings:
+            if c not in self.impute:
+                missings_list.append(c)
+        return missings_list
+
+
+    @property
+    def transformed(self):
+        '''
+        Returns the dictionary of transformed 
+        features to their respective transformation features.'''
+        if self._transformed:
+            return self._transformed
+
+
+    def transform(self, pair):
+        '''
+        Maps the features to the features that are its transformations 
+        in order to identify invalid intercorrelations.'''
+        if isinstance(pair, dict):
+            for k in pair.keys():
+                if k in self._data.columns:
+                    if k not in self._transformed.keys():
+                        self._transformed[k] = pair[k]
+                    else:
+                        print("Adding {} to list of {} transformations {}.".format(pair[k], k, self._transformed[k]))
+                        if isinstance(self._transformed[k], str):
+                            self._transformed[k] = [self._transformed[k]]
+                        self._transformed[k].append(pair[k])
+                else:
+                    raise KeyError("{} is not a feature of {}.".format(k, self._name))
+
 
     @property
     def children(self):
         '''Returns a list of Trainer's children Trainer's.'''
         return self._children
+
+
+    def add_child(self, newchild):
+        '''
+        Adds a Child Trainer Object to the Children list.
+        '''
+        if isinstance(newchild, Trainer):
+            # print('\n**{} birthed {}!'.format(self.name, newchild.name))
+            self._children.append(newchild)
+
 
     def child(self, names):
         '''Returns a list of Child Trainer Objects specified by name strings.'''
@@ -273,11 +497,25 @@ class Trainer(object):
         return child_list
 
     
+    def __makeData(self, dataframe):
+        '''Constuctor for initializing Trainer data.'''
+        if not isinstance(dataframe, pd.DataFrame):
+            raise ValueError("Data must be passed in a dataframe!")
+        else:
+            return dataframe.copy()
+
+    
     @property
     def now(self):
         '''Returns a the current Trainer's data.'''
         return self._data
   
+
+    @property
+    def same(self):
+        '''Returns the number of times the Trainer's data have been rewritten.'''
+        return self._data.equals(self.__last_version)
+
 
     @property
     def changes(self):
@@ -308,16 +546,6 @@ class Trainer(object):
     def get_original_data(self,):
         '''Returns a the Trainer's data as it was first initialized.'''
         return self.__data_original
-     
-
-    def add_child(self, newchild):
-        '''
-        Adds a Child Trainer Object to the Children list.
-        '''
-        if isinstance(newchild, Trainer):
-            # print('\n**{} birthed {}!'.format(self.name, newchild.name))
-            self._children.append(newchild)
-
     
 
     def get_attributes(self):
@@ -345,8 +573,31 @@ class Trainer(object):
               \tSum of Nulls: \n{}\n\
               \tReturning >> Name, Outcome, Target, Parent\n'.\
               format(self._name, self.shape, self.id, parental_name, parental_shape, children_names,
-                    self._outcome, self._target, self.nulls))
+                    self._outcome, self._target, self.nulls()))
         return self._name, self._outcome, self._target, parental_object
+
+    
+    @staticmethod
+    def list_features_wmissing(dataset):
+        '''
+        Return all features that have missing values:
+            - a list of just those features.'''
+        # print('Summary Statistics on Full Data set:\n{}'.format(dataset.describe(include='all').round(2)))
+        has_null = pd.DataFrame({'Total_missings' : dataset.isnull().sum()})
+        has_null[(has_null.Total_missings >0)].index.tolist()
+        print('\n\n{} Features containing missing values: {}\n'
+              .format(len(has_null[(has_null.Total_missings >0)].index.tolist()),
+               has_null[(has_null.Total_missings >0)].index.tolist()))
+        print(has_null.ix[2:,:])
+        return has_null[(has_null.Total_missings >0)].index.tolist()
+
+    
+    def show(self):
+        '''Print the attributes of the Trainer.'''
+        attribute_list = 'name id parent.name outcome target same changes shape impute missings nulls()'.split()
+        for att in attribute_list:
+            print(att, eval('{}.{}'.format('self', att)))
+
 
 
 class ModelTrains(object):
@@ -476,20 +727,22 @@ class ModelTrains(object):
             trainer_list.append(TRAIN_PARENT)
             if not self.__training_data.empty:
                 if not self.__holdout.empty:
-                    HOLDOUT = Trainer('HOLDOUT', self.__holdout.copy(), outcome_name, ModelTrainIndex=len(trainer_list))
-                    HOLDOUT.parent = TRAIN_PARENT
+                    HOLDOUT = Trainer('HOLDOUT', self.__holdout.copy(), outcome_name, 
+                                     ModelTrainIndex=len(trainer_list), parent=TRAIN_PARENT)
                     hname, houtcome, htarget, hparent = HOLDOUT.get_attributes()
                     trainer_list.append(HOLDOUT)
-                    TRAIN = Trainer('TRAIN', self.__training_data.copy(), outcome_name, validator=HOLDOUT, ModelTrainIndex=len(trainer_list))
+                    TRAIN = Trainer('TRAIN', self.__training_data.copy(), outcome_name, 
+                                    validator=HOLDOUT, ModelTrainIndex=len(trainer_list), 
+                                    parent=TRAIN_PARENT)
                 else:
-                    TRAIN = Trainer('TRAIN', self.__training_data.copy(), outcome_name, ModelTrainIndex=len(trainer_list))
-                TRAIN.parent = TRAIN_PARENT
+                    TRAIN = Trainer('TRAIN', self.__training_data.copy(), outcome_name, 
+                                    ModelTrainIndex=len(trainer_list), parent=TRAIN_PARENT)
                 TRAIN_PARENT.add_child(TRAIN)
                 trname, troutcome, trtarget, trparent = TRAIN.get_attributes()
                 trainer_list.append(TRAIN)
             if not self.__testing_data.empty:
-                TEST = Trainer('TEST', self.__testing_data.copy(), outcome_name, ModelTrainIndex=len(trainer_list))
-                TEST.parent = TRAIN_PARENT
+                TEST = Trainer('TEST', self.__testing_data.copy(), outcome_name, 
+                               ModelTrainIndex=len(trainer_list), parent=TRAIN_PARENT)
                 TRAIN_PARENT.add_child(TEST)
                 tename, teoutcome, tetarget, teparent = TEST.get_attributes()
                 trainer_list.append(TEST)
@@ -565,11 +818,20 @@ class ModelTrains(object):
             * possibly an analogous testing set
         Returns the list of initialized trainer objects.
         '''
-        trainer_list = self.trainers()
-        if isintance(newtrainer, Trainer):
+        trainer_list = self.trainers
+        if isinstance(newtrainer, Trainer):
             for t in trainer_list:
                 if t.now.equals(newtrainer.now):
-                    raise ValueError("\nRedundant! {} already contains this data.".format(t.name))
+                    raise ValueError("\n{} Redundant! {} already contains this data.".format(newtrainer.name, t.name))
                     return
             newtrainer.id = len(trainer_list)
             self._trainers.append(newtrainer)
+
+    def show(self):
+        '''
+        Print Trainers
+        '''
+        print('\nCURRENT TRAINER OBJECTS')
+        for i in self._trainers:
+            print(i.name, i.shape, '#{}'.format(i.id))
+

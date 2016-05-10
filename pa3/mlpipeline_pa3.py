@@ -1,4 +1,5 @@
 #import libraries for pipeline
+#mlpipeline_pa3
 import os
 import sys
 import pandas as pd
@@ -11,7 +12,7 @@ import math
 import time
 import json
 import requests
-import hide_code
+# import hide_code
 import notebook
 import re
 import seaborn as sns; sns.set(style="ticks", color_codes=True)
@@ -65,12 +66,10 @@ def plot_confusion_matrix(cm, title='Confusion matrix', doc='outcome_confusion_m
     fig.savefig(doc)
 
 
-
-
 # Determine which features require preprocessing.
 def list_features_wmissing(dataset):
     '''
-    Returns all features that have missing values:
+    Return all features that have missing values:
         - a list of just those features.'''
     print('Summary Statistics on Full Data set:\n{}'.format(dataset.describe(include='all').round(2)))
     has_null = pd.DataFrame({'Total_missings' : dataset.isnull().sum()})
@@ -82,10 +81,10 @@ def list_features_wmissing(dataset):
     return has_null[(has_null.Total_missings >0)].index.tolist()
 
 
-
 # Feed this list as input to a general function that
 # trains a model of missings imputations for each feature.
-def get_correlates_dict(dataset, feature_wnull, not_same=True, output_variable=None):
+def get_correlates_dict(trainer, feature_wnull, not_same=True, output_variable=None):
+    dataset = trainer.now.copy()
     correlated_predictionary = {}
     for target in feature_wnull:
         if target not in output_variable:
@@ -126,7 +125,7 @@ def get_correlates_dict(dataset, feature_wnull, not_same=True, output_variable=N
 
 # Feed this dictionary into a function that
 # trains a model of missings imputations
-def get_encoded_features_list(dataset, discrete_threshold=None, excepting=None, only=None):
+def get_encoded_features_list(dataset, discrete_threshold=None, excepting=False, only=False):
     '''Returns a list of discrete variables that
        have numerical values signifying missing.
        (i.e. 96=DK, 98=REFUSED)'''
@@ -134,7 +133,9 @@ def get_encoded_features_list(dataset, discrete_threshold=None, excepting=None, 
     print('\nINSPECT DISCRETE FEATURES FOR ENCODED MISSISINGS:\n')
     if not only:
         only = dataset.columns.tolist()
-    only = [feature for feature in only if feature not in excepting]
+    if excepting:
+        only = [feature for feature in only if feature not in excepting]
+
     for col in only:
         if discrete_threshold:
             if len(dataset[col].unique()) < discrete_threshold:
@@ -181,115 +182,163 @@ def drop_obs_w_anynan(dataset, features_list):
     return dataset
 
 
-def decode_and_drop_missings(raw_train, decodings_dict, except_threshold=None, encode_except=None, outcome_variable=None):
+def decode_and_drop_missings(trainer, ModelTrains, decodings_dict, except_threshold=None, encode_except=None, outcome_variable=None):
     '''Inputs:
         - Dataframe
         - Decoding variables to values dictionary
         - Optional discrete_threshold (i.e. 1000 unique values)
-       Returns '''
-    encoded_features = get_encoded_features_list(raw_train,
+       Returns 3 Dataframes of missings removal strategies.'''
+    encoded_features = get_encoded_features_list(trainer.now.copy(),
                                                  except_threshold,
                                                  excepting=encode_except)
-
+    decodetrainer = trainer.now.copy()
     for i in range(len(decodings_dict.keys())):
         if not decodings_dict[i]['on']:
             decodings_dict[i]['on'] = encoded_features
         else:
             encoded_features.extend(decodings_dict[i]['on'])
-        raw_train, imputation_candidates =         decode_extended_to_nan(raw_train, decodings_dict[i]['on'],
-                               to_replace = decodings_dict[i]['to_replace'],
-                               values = decodings_dict[i]['with_replace'])
+        raw_train, imputation_candidates =  decode_extended_to_nan(decodetrainer, decodings_dict[i]['on'],
+                                            to_replace = decodings_dict[i]['to_replace'],
+                                            values = decodings_dict[i]['with_replace'])
+
+    # Corrected dataset with all missings in place. Stage as Trainer.
+    Tdecode = Trainer('FULL_MISS', raw_train, trainer.outcome)
+    Tdecode.set_parent(trainer, ModelTrains)
+    try:
+        ModelTrains.add(Tdecode)  
+    except:
+        pass 
+    
 
     # Derive binary missing indicator variables
-    dropped_train = raw_train.copy()
-    derived_train = raw_train.copy()
+    dropped_train = Tdecode.now.copy()
+    derived_train = Tdecode.now.copy()
     inspect_missing_list = []
     for feature in imputation_candidates[imputation_candidates.Total_missing > 0].index:
         if feature not in outcome_variable:
             inspect_missing_list += [feature]
             is_missing_var = feature + '_missing'
             derived_train[is_missing_var] = derived_train[feature].isnull().map({True : 1, False : 0})
+    Tim = Trainer('FULL_ISMISS', derived_train, Tdecode.outcome)
+    Tim.set_parent(Tdecode, ModelTrains)
+    try:
+        ModelTrains.add(Tim)  
+    except:
+        pass 
 
     # Drop all missings
-    train_missing = dropped_train.copy()
+    if isinstance(outcome_variable, str):
+        outcome_variable = [outcome_variable]
 
-    if outcome_variable:
-        dropping_columns = [c for c in derived_train.index.tolist() if c not in outcome_variable]
-        derived_train.dropna(how='any', axis=1, subset=[dropping_columns])
-    else:
-        derived_train.dropna(how='any', axis=1)
-    dropped_train =  drop_obs_w_anynan(dropped_train, encoded_features).copy()
-    return dropped_train, derived_train, train_missing, inspect_missing_list
+    X = Tim.now.copy()
+    X.dropna(how='any', axis=1, inplace=True)
+    Tcol = Trainer('COL_DROP', X, Tim.outcome)
+    Tcol.set_parent(Tim, ModelTrains)
+    try:
+        ModelTrains.add(Tcol)  
+    except:
+        pass 
+    
+    dropped_train =  drop_obs_w_anynan(Tdecode.now.copy(), encoded_features).copy()
+    Trow = Trainer('ROW_DROP', dropped_train, Tdecode.outcome)
+    Trow.set_parent(Tdecode, ModelTrains)
+    try:
+        ModelTrains.add(Trow)  
+    except:
+        pass 
+    for i in ModelTrains.trainers:
+        print(i.name, i.shape, i)
+    return inspect_missing_list
 
 
 
 # Transform Data
-def gen_transform_data(dataset, transform_dict, transformations=None):
+def gen_transform_data(trainer, ModelTrains, transform_dict, transformations=None):
     '''Inputs:
         - Dataset
         - dictionary of features to transform with
             respective transformation function.'''
+    dataset = trainer.now.copy()
     if not transformations:
         transformations = {'log': 'np.log'}
+    track_transformations = {}
     for feature in transform_dict.keys():
-        fx = transform_dict[feature]
-        plus = 0
-        if fx in transformations:
-            new_feature = feature + '_' + fx
-            print('\nTransforming {} by way of {} = {}'
-                  .format(feature, fx, new_feature))
-            if fx == 'log':
-                plus = 1
-            dataset[new_feature] = dataset[feature].apply(lambda x : eval(transformations[fx])(x + plus))
-        else:
-            raise ValueError("Provide valid transformation function. {} is invalid.".format(fx))
-    return dataset
+        try:
+            fx = transform_dict[feature]
+            plus = 0
+            if fx in transformations:
+                new_feature = feature + '_' + fx
+                print('\nTransforming {} by way of {} = {}'
+                      .format(feature, fx, new_feature))
+                if fx == 'log':
+                    plus = 1
+                dataset[new_feature] = dataset[feature].apply(lambda x : eval(transformations[fx])(x + plus))
+                track_transformations[feature] = new_feature
+            else:
+                raise ValueError("Provide valid transformation function. {} is invalid.".format(fx))
+        except:
+            print('Transform of {} FAILED on {}'.format(feature, trainer.name))
+            pass
+    # Add new trainer
+    if trainer.now.equals(dataset):
+        return
+    else:
+        newname = trainer.name + '_'
+        for transform_command in transformations.keys():
+            newname += transform_command
+        newtrainer = Trainer(newname, dataset, trainer.outcome)
+        newtrainer.set_parent(trainer, ModelTrains)
+        newtrainer.transform(track_transformations)
+        ModelTrains.add(newtrainer)
+    for i in ModelTrains.trainers:
+        print(i.name, i.shape, i)
+    return
 
 
 def get_mse(predicted, val_targets):
     return (((predicted - val_targets) ** 2).sum()) / len(predicted)
 
 
-def replace_best_model(best, model_dict, clf, parameters, X_train, 
-                       X_val, reg_or_clf, model_number, outcome_variable, 
-                       learner, metric, filename='best'):
-    print('\nMODEL SCORE ({}) to beat:'.format(metric), best[metric])
-    best['model_dict'] = None
-    best[metric] = model_dict[metric]
-    best['Regressor'] = model_dict['Regressor']
-    best['Classifier'] = model_dict['Classifier']
-    print('\n\tBETTER MODEL!\n')
-    print('Model {}.'.format(model_dict['Model']))
-    for better_result in model_dict:
-        if better_result != 'Model':
-            print(better_result, model_dict[better_result])
-    best['model_dict'] = model_dict.copy()
-    best['PARAMETERS'] = parameters.copy()
-    best['model_dict'] = model_dict.copy()
-    try:
-        importances = clf.feature_importances_
-        sorted_idx = np.argsort(importances)
-        padding = np.arange(len(cols)) + 0.5
-        plt.close('all')
-        fig, ax = plt.subplots(figsize=(10,8))
-        t = 'Model {} Imputed {} by {}:\nVariable Importances of {}'.format(model_number, 
-                                                                            outcome_variable, 
-                                                                            learner, cols)
-        doc = '{}_{}_{}_feat_importance.png'.format(filename, model_number, learner)
-        plt.barh(padding, importances[sorted_idx], align='center')
-        plt.yticks(padding, cols)
-        plt.xlabel("Relative Importance")
-        plt.title(t)
-        plt.tight_layout()
-        fig.savefig(doc)
-    except:
-        print('CLF importances not available')  
-    if reg_or_clf=="C":
-        t = 'Model {} of {} by {}:'.format(model_number, outcome_variable, learner)
-        probs = clf.fit(X_train[cols], X_train[outcome_variable]).predict_proba(X_val[cols])
+# def replace_best_model(best, model_dict, clf, parameters, X_train, 
+#                        X_val, reg_or_clf, model_number, outcome_variable, 
+#                        learner, metric, filename='best'):
+#     print('\nMODEL SCORE ({}) to beat:'.format(metric), best[metric])
+#     best['model_dict'] = None
+#     best[metric] = model_dict[metric]
+#     best['Regressor'] = model_dict['Regressor']
+#     best['Classifier'] = model_dict['Classifier']
+#     print('\n\tBETTER MODEL!\n')
+#     print('Model {}.'.format(model_dict['Model']))
+#     for better_result in model_dict:
+#         if better_result != 'Model':
+#             print(better_result, model_dict[better_result])
+#     best['model_dict'] = model_dict.copy()
+#     best['PARAMETERS'] = parameters.copy()
+#     best['model_dict'] = model_dict.copy()
+#     try:
+#         importances = clf.feature_importances_
+#         sorted_idx = np.argsort(importances)
+#         padding = np.arange(len(cols)) + 0.5
+#         plt.close('all')
+#         fig, ax = plt.subplots(figsize=(10,8))
+#         t = 'Model {} Imputed {} by {}:\nVariable Importances of {}'.format(model_number, 
+#                                                                             outcome_variable, 
+#                                                                             learner, cols)
+#         doc = '{}_{}_{}_feat_importance.png'.format(filename, model_number, learner)
+#         plt.barh(padding, importances[sorted_idx], align='center')
+#         plt.yticks(padding, cols)
+#         plt.xlabel("Relative Importance")
+#         plt.title(t)
+#         plt.tight_layout()
+#         fig.savefig(doc)
+#     except:
+#         print('CLF importances not available')  
+#     if reg_or_clf=="C":
+#         t = 'Model {} of {} by {}:'.format(model_number, outcome_variable, learner)
+#         probs = clf.fit(X_train[cols], X_train[outcome_variable]).predict_proba(X_val[cols])
         
-        plot_roc(t, X_val, probs, clf, outcome_variable)
-    return best.copy()
+#         plot_roc(t, X_val, probs, clf, outcome_variable)
+#     return best.copy()
 
 
 
