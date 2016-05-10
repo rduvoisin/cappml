@@ -310,12 +310,7 @@ def splitter(trainer, ModelTrains, models_to_run = ['RFR', 'DTR', 'KNNR', 'KNN',
     best = {'score': float(0), 'model_dict': None, 'Classifier': None, 'Regressor': None}
     if not results_dataframe:
         results_dataframe = results_matrix.copy()
-<<<<<<< HEAD
-    # Split the training data into a training set and a validation set
-    X_train, X_test, y_train, y_test = cross_validation.train_test_split(dataset[cols], dataset[outcome_variable], test_size = testsize)   
-    
-    print('regress_only?', regress_only)
-=======
+
     
     # Split the training data into a training set and a validation set
     dataset = trainer.now.copy()
