@@ -15,19 +15,18 @@ import json
 import requests
 import notebook
 import re
-import seaborn as sns; sns.set(style="ticks", color_codes=True)
+import seaborn as sns; sns.set(context="paper", style="darkgrid", color_codes=True)
  
 # %matplotlib inline
-FIGWIDTH = 10
-FIGHEIGHT = 8
+FIGWIDTH = 12
+FIGHEIGHT = 10
 
 
 
-def inspect_correlations(ModelTrains, filedir='data/plots'):
-    '''Produce Correlation Matrices with Nonmissing Traner Objects'''
+def inspect_correlations(ModelTrains, filedir='data/plots', FIGWIDTH=FIGWIDTH, FIGHEIGHT=FIGHEIGHT):
+    '''Produce Correlation Matrices with Nonmissing Trainer Objects'''
     plt.close('all')
     nonissing_trainers = []
-    print('Nonmissing Trainers for Correlations')
     for trainer in ModelTrains.trainers:
         save_this_directory = filedir + '/{}'.format(trainer.name)
         save_this_here = save_this_directory + '/correlations'
@@ -43,16 +42,53 @@ def inspect_correlations(ModelTrains, filedir='data/plots'):
             os.mkdir(save_this_here)
         except:
             pass
+        try:
+            plt.close('all')
+            # Compute the correlation matrix
+            corr = trainer.now.corr()
+            # Generate a mask for the upper triangle
+            mask = np.zeros_like(corr, dtype=np.bool)
+            mask[np.triu_indices_from(mask)] = True
+            # Set up the matplotlib figure
+            fig, axs = plt.subplots(figsize=(FIGWIDTH, FIGHEIGHT))
+            # Generate a custom diverging colormap
+            cmap = sns.diverging_palette(220, 10, as_cmap=True)
+            # Draw the heatmap with the mask and correct aspect ratio
+            # with sns.axes_style("white"):
+            #     g = sns.heatmap(corr, mask=mask, cmap=cmap, cbar_ax=1, 
+            #                     vmax=.3, square=True, cbar=True,
+            #                     cbar_kws={"shrink": .5}, linewidths=.5)
+            # g = sns.heatmap(corr, mask=mask, cmap=cmap, vmax=.3,
+            #             square=True, xticklabels=5, yticklabels=5,
+            #             linewidths=.5, cbar_kws={"shrink": .5}, 
+            #             legend_out=True, ax=axs)
+            g = sns.corrplot(trainer.now, annot=False, diag_names=False)
+            doc = save_this_here + '/matrix_{}_{}.png'.format(trainer.name, trainer.id)
+            t = '\n{}\n(Anti)Correlation Matrix\n{}'.format(trainer.name, 
+                                                            trainer.shape)
+            plt.title(t, fontsize=12)
+            plt.tight_layout()
+            fig.savefig(doc)
+            plt.close('all')
+        except:
+            pass
         if trainer.now.isnull().sum().sum() == 0:
-            x, y, z, a = trainer.get_attributes()
+            plt.close('all')
+            # x, y, z, a = trainer.get_attributes()
             nonissing_trainers.append(trainer)
-            # fig, axs = plt.subplots(figsize=(12, FIGWIDTH))
-            plt.figure(figsize=(12, FIGWIDTH))
-            g = sns.corrplot(trainer.now, annot=False)
-            t = "Non-Missing Correlation Matrix of {}, {}".format(trainer.name, trainer.shape)
-            doc = '{}/{}.png'.format(save_this_directory,'corrplot_{}'.format(trainer.shape))
-            # g.fig.text(0.33, 1.02, t, fontsize=18)
-            g.savefig(doc)
+            fig, axs = plt.subplots(figsize=(FIGWIDTH, FIGWIDTH))
+            # plt.figure(figsize=())
+
+            g = sns.corrplot(trainer.now, annot=False, diag_names=False)
+            t = "\n{}\nNon-Missing Only Correlation Matrix,\n{}".format(trainer.name, 
+                                                                        trainer.shape)
+            doc = '{}/{}.png'.format(save_this_directory,'corrplot_{}_{}'.format(trainer.name, 
+                                                                                 trainer.id))
+            # g.add_legend()
+
+            plt.title(t)
+            plt.tight_layout()
+            fig.savefig(doc)
             plt.close('all')
     plt.close('all')
 
@@ -68,14 +104,22 @@ def inspect_pairplot(trainer, descriptor=None, filedir='data/plots',
     if trainer.target not in inspect:
         inspect.append(trainer.target) 
     x = len(inspect)
-    if not size:
-        size = x 
-        aspect = 1
-    g = sns.pairplot(data=trainer.now[inspect].dropna(), x_vars=x_vars, y_vars=y_vars, 
-        hue = trainer.target, palette="Set1", 
-        aspect= aspect, size=size)
+    # if not size:
+    #     size = x 
+    #     aspect = 1
+    
+    fig, axs = plt.subplots(figsize=(FIGWIDTH, FIGWIDTH))
+    # g = sns.pairplot(data=trainer.now[inspect].dropna(), diag_kind="hist",
+    #                  x_vars=x_vars, y_vars=y_vars, 
+    #                  hue = trainer.target, palette="Set1")
+    try:
+        g = sns.pairplot(iris, diag_kind="kde", markers="+",
+                        plot_kws=dict(s=50, edgecolor="b", linewidth=1),
+                        diag_kws=dict(shade=True))
+    except:
+        pass
     save_this_directory = filedir + '/{}'.format(trainer.name)
-    save_this_here = save_this_directory
+    save_this_here = save_this_directory + '/correlations'
     try:
         os.mkdir(filedir)
     except:
@@ -90,14 +134,19 @@ def inspect_pairplot(trainer, descriptor=None, filedir='data/plots',
         pass
     if descriptor:
         desc = descriptor.replacer
-    t = "Distributions of {}/{} features of {} by {}".format(x, 
-                                                            len(trainer.now.columns.tolist()), 
-                                                            trainer.name,
-                                                            trainer.target)
-    doc = '{}/{}.png'.format(save_this_here,'pair_plot_{}'.format(x))
-    g.fig.text(0.33, 1.02, t, fontsize=18)
-    g.savefig(doc) 
-    plt.close('all')
+    try:
+        t = "\nDistributions of {}/{} features by {}\n on {}".format(x, 
+                                                                len(trainer.now.columns.tolist()), 
+                                                                trainer.target,
+                                                                trainer.name)
+        doc = '{}/{}.png'.format(save_this_here,'pair_plot_{}_features'.format(x))
+
+        plt.title(t)
+        plt.tight_layout()
+        g.savefig(doc) 
+        plt.close('all')
+    except:
+        pass
 
 
 def inspect_zeros(trainer, filedir, inspect=None, FIGWIDTH=FIGWIDTH, FIGHEIGHT=FIGHEIGHT):
@@ -136,7 +185,7 @@ def inspect_zeros(trainer, filedir, inspect=None, FIGWIDTH=FIGWIDTH, FIGHEIGHT=F
                     plt.title(t)
                     axs.grid(False)
                     doc = '{}/{}.png'.format(save_this_here,'inspect_{}_when_{}_zero'.format(x, feature))
-                    plt.gcf().tight_layout()
+                    plt.tight_layout()
                     plt.savefig(doc) 
                 except:
                     plt.close('all')
@@ -145,13 +194,14 @@ def inspect_zeros(trainer, filedir, inspect=None, FIGWIDTH=FIGWIDTH, FIGHEIGHT=F
         
         fig, axs = plt.subplots(figsize=(FIGWIDTH, FIGHEIGHT)) 
         tag = '{}_pairplot_when_zero'.format(feature)
-        t = "Distribution | {} = Zero.".format(feature)
+        t = "General Distribution | {} = Zero.".format(feature)
         doc = '{}/{}.png'.format(save_this_here, tag)  
         try:
             g = sns.pairplot(data=D[D[feature]==0][inspect].dropna(), 
-                             hue = trainer.target, palette="Set1")
-            g.fig.text(0.33, 1.02, t, fontsize=20)
-            g.savefig(doc) 
+                             hue = trainer.target, palette="Set1", ax=axs)
+            plt.title(t)
+            plt.tight_layout()
+            fig.savefig(doc) 
         except:
             plt.close('all')
             pass
@@ -170,8 +220,7 @@ def read_data(filename, to='pandas', holdout_size = False, drop_column = False):
     Returns:
       (list of strings, pandas dataframe)
     '''
-    # DF.drop([DF.columns[[0, 1, 3]]], axis=1) # Note: zero indexed
-    # DF.drop('column_name', axis=1, inplace=True)
+
     if to == 'pandas':
         data = pd.read_csv(filename)
         if isinstance(drop_column, int):
@@ -194,8 +243,6 @@ def read_data(filename, to='pandas', holdout_size = False, drop_column = False):
             else:
                 TRAIN = data.copy()
                 HOLDOUT = pd.DataFrame()
-                # if drop_column:
-                #     del TRAIN[TRAIN.columns[drop_column]]
     return labels, TRAIN, data, HOLDOUT
 
 
@@ -247,8 +294,7 @@ class Trainer(object):
         return self._best_estimators
     
 
-    @best.setter
-    def best(self, pair):
+    def set_best(self, pair):
         '''Set a key and estimator model in the best models dict'''
         if isinstance(pair, (tuple, list)):
             self._best_estimators[pair[0]] = pair[1]
@@ -342,10 +388,13 @@ class Trainer(object):
     @impute.setter
     def impute(self, column_list):
         '''Define the features that require imputation modelling'''
+        if isinstance(column_list, str):
+            column_list = [column_list]
         if isinstance(column_list, list):
             for c in column_list:
                 if c not in self._data.columns.tolist():
-                    raise ValueError("{} is not a feature of Trainer object!".format(c))
+                    print("{} is not a feature of Trainer object!".format(c))
+                    pass
                 elif self._data[c].isnull().sum().sum() == 0:
                     raise ValueError("{} has no missing to impute in {}!".format(c, self._name))
                 else:
@@ -360,6 +409,7 @@ class Trainer(object):
         '''Returns the list column names that have been fit and imputed.'''
         return self._imputed
 
+
     @imputed.setter
     def imputed(self, name):
         '''Add feature to a list of imputed features.'''
@@ -373,7 +423,7 @@ class Trainer(object):
 
     
     @property
-    def missing(self):
+    def missings(self):
         '''Return a list columns with missing data that are 
         not already staged for imputation modelling.'''
         self._missings = self.__updateMissings()
@@ -397,6 +447,7 @@ class Trainer(object):
         features to their respective transformation features.'''
         if self._transformed:
             return self._transformed
+
 
     def transform(self, pair):
         '''
@@ -452,8 +503,6 @@ class Trainer(object):
             raise ValueError("Data must be passed in a dataframe!")
         else:
             return dataframe.copy()
-
-
 
     
     @property
@@ -527,12 +576,13 @@ class Trainer(object):
                     self._outcome, self._target, self.nulls()))
         return self._name, self._outcome, self._target, parental_object
 
+    
     @staticmethod
     def list_features_wmissing(dataset):
         '''
         Return all features that have missing values:
             - a list of just those features.'''
-        print('Summary Statistics on Full Data set:\n{}'.format(dataset.describe(include='all').round(2)))
+        # print('Summary Statistics on Full Data set:\n{}'.format(dataset.describe(include='all').round(2)))
         has_null = pd.DataFrame({'Total_missings' : dataset.isnull().sum()})
         has_null[(has_null.Total_missings >0)].index.tolist()
         print('\n\n{} Features containing missing values: {}\n'
@@ -540,6 +590,14 @@ class Trainer(object):
                has_null[(has_null.Total_missings >0)].index.tolist()))
         print(has_null.ix[2:,:])
         return has_null[(has_null.Total_missings >0)].index.tolist()
+
+    
+    def show(self):
+        '''Print the attributes of the Trainer.'''
+        attribute_list = 'name id parent.name outcome target same changes shape impute missings nulls()'.split()
+        for att in attribute_list:
+            print(att, eval('{}.{}'.format('self', att)))
+
 
 
 class ModelTrains(object):

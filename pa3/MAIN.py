@@ -30,7 +30,7 @@ dataplotdirZERO = dataplotdir + '/{}/zeros'.format(T.name)
 inspect=['age','MonthlyIncome','DebtRatio',
                   'RevolvingUtilizationOfUnsecuredLines',
                   'SeriousDlqin2yrs']
-inspect_pairplot(T, filedir=dataplotdir, inspect=inspect)
+# inspect_pairplot(T, filedir=dataplotdir, inspect=inspect)
 
 # Deal with missing values.
 # Collect candidates for imputations of missings. 
@@ -57,8 +57,8 @@ decode_and_drop_missings(T, Delinquency,
                         encode_except=nothese,
                         outcome_variable=[T.outcome])
 
-print('\nSummarized Data After Removing Cases with Missing Values:\n')
-inspect_correlations(Delinquency)
+print('\nSummarized Data After Tagging Cases with Missing Values:\n')
+# inspect_correlations(Delinquency)
 
 # Save tracer datasets as Trainer objects.(name, dataframe, outcome_name, validator = None, ModelTrainIndex = None))
 transform_features_dict = {'RevolvingUtilizationOfUnsecuredLines' : 'log',
@@ -106,109 +106,11 @@ IT.impute = to_impute
 #                   cols=None, exclude_features=None, testsize=0.20, 
 #                   results_dataframe=None, regress_only=False,
 #                   filename='output'
-XTrain = splitter(IT, Delinquency)
+XTrain = splitter(IT, Delinquency, models_to_run=['RFR', 'DT'])
 
 
 
 
-# # Keep a training set version which uses the binary versions for any variables that have missings
-# train_derived_transformed_dropped = train_derived_transformed.copy()
-# for feature in imputation_candidates:
-#     del train_derived_transformed_dropped[feature]
-#     try:
-#         del train_derived_transformed_dropped[feature + '_log']
-#     except:
-#         print('ERROR:{}'.format(feature + '_log'))
-# print('\nSummarize Training Set Version that Replaces Imputation Candidates with Binary Missings Variables:\n')
-# train_derived_transformed_dropped
-# train_derived_transformed_dropped.isnull().sum()
-
-
-# ismiss_correlates_dict = get_correlates_dict(train_derived_transformed_dropped,
-# train_derived_transformed_dropped.columns.tolist(),
-# not_same=True, output_variable=['SeriousDlqin2yrs'])
-
-# # Review variables that are most correlated in both versions of the transformed data.
-# print("Review variable correlations for each version of the 'NON-MISSING' transformed training data:\n-Casewise drop of any examples with missings:")
-# dropped_correlates_dict
-
-# print("\n-Column wise drop of columns with missing examples, replaced by '_missing' binary variables:")
-# ismiss_correlates_dict
-# train_missing_transformed
-# impute_correlates_dict = get_correlates_dict(train_missing_transformed, train_missing_transformed.columns.tolist(), not_same=True, output_variable='SeriousDlqin2yrs')
-# train_missing_transformed.isnull().sum()
-# impute_correlates_dict
-
-# imputation_candidates
-
-# train_missing_transformed.columns.tolist()
-
-# # Build Model and Results Dictionaries:
-# # Try predicting each imputation candidate using each version.
-# training_version = {}
-# print('\nCOMPARE CORRELATES OF KEY IMPUTATION CANDIDATES OF EACH VERSION OF TRAINING SET:\n')
-# for feature in imputation_candidates:
-#     print(dropped_correlates_dict[feature])
-#     if feature in dropped_correlates_dict:
-#         if 0 in training_version:
-#             pass
-#         else:
-#             training_version[0] = {}
-#         training_version[0][feature] = dropped_correlates_dict[feature]
-#     if feature in ismiss_correlates_dict:
-#         try:
-#             if 1 in training_version:
-#                 pass
-#             else:
-#                 training_version[1] = {}
-#             print(ismiss_correlates_dict[feature])
-#             training_version[1] = {feature : ismiss_correlates_dict[feature]}
-#         except:
-#             print('not in data')
-#     if feature in impute_correlates_dict:
-#         try:
-#             if 2 in training_version:
-#                 pass
-#             else:
-#                 training_version[2] = {}
-#             print(impute_correlates_dict[feature])
-#             training_version[2] = {feature : impute_correlates_dict[feature]}
-#         except:
-#             print('not in data')
-
-# print(training_version)
-    
-# preprocessed_sets = ['train_transformed', 'train_derived_transformed_dropped']
-# model_builder = {'trainees': preprocessed_sets,
-#                  'test_sizes': [.20, .20],
-#                  'C': {'RandomForestC' : {'n_estimators': ['NA', 10, 100], 'min_samples_split': ['NA', 1, 5, 10], 'class_weight' : ['NA', 'balanced', 'balanced_subsample']},
-#                        'DecisionTreeC' : {'max_depth': ['NA', 100], 'min_samples_split':['NA', 1, 5, 10],
-#                                          'class_weight' : ['NA', 'balanced']},
-#                        'KNNC' : {'n_neighbors': [ 1, 2, 3, 5], 'weights': ['uniform', 'distance']}},
-#                  'R': {'RandomForestR' : {'n_estimators':['NA', 10, 100],'min_samples_split': ['NA', 1, 5, 10]}, #,
-#                        'DecisionTreeR' : {'max_depth': ['NA', 10, 100], 'min_samples_split':['NA', 1, 5, 10]},
-#                        'KNNR' : {'n_neighbors': [ 1, 2, 3, 5], 'weights': ['uniform', 'distance']}},
-#                  'versions':training_version
-#                  }
-
-# for aset in preprocessed_sets:
-#     print(aset, "\n", eval(aset).shape)
-
-# # Run models on ['MonthlyIncome','NumberOfDependents']
-# to_impute =['MonthlyIncome','NumberOfDependents']
-# to_avg = [c for c in train_transformed.columns.tolist() if c not in to_impute]
-# outcome = 'SeriousDlqin2yrs'
-# to_avg = [c for c in to_avg if c not in outcome]
-# train_impute = train_missing_transformed.copy()
-
-
-# # Select and apply classifier to the outcome variable on the dataset.
-# # Now run imputed data through selected model
-# features = ['RevolvingUtilizationOfUnsecuredLines_log',
-#             'age', 'NumberOfTime30-59DaysPastDueNotWorse',
-#             'DebtRatio','MonthlyIncome_log', 'NumberOfOpenCreditLinesAndLoans',
-#             'NumberOfTimes90DaysLate', 'NumberRealEstateLoansOrLines',
-#             'NumberOfTime60-89DaysPastDueNotWorse', 'NumberOfDependents']
 
 # # STEP 0
 # ismissing_cols = ['MonthlyIncome_missing', 'NumberOfDependents_missing']
