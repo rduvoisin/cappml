@@ -560,29 +560,22 @@ def splitter(trainer, ModelTrains, models_to_run = ['RFR', 'DTR', 'KNNR', 'KNN',
 
     # Now run thru the loop to get the best clfs.
     regexregress = re.compile(r"(\w+)Regressor")
->>>>>>> 6de70ef1d55fefdc93d9a97944c617058e96ce5c
     model_number = 0
     for index, clf in enumerate([clfs[x] for x in models_to_run]):
         model_dict = {}
         print(models_to_run[index])
-<<<<<<< HEAD
-        learner = models_to_run[index]
-=======
         # Initialize a model dictionary
         for k in results_dataframe.keys():
             # results_dataframe[k].append(np.nan)
             print(k, len(results_dataframe[k]))
             model_dict[k] =  np.nan
         
->>>>>>> 6de70ef1d55fefdc93d9a97944c617058e96ce5c
         parameter_values = grid[models_to_run[index]]
         print('\nParameter Values', parameter_values)
         print('\nParameterGrid(parameter_values)', ParameterGrid(parameter_values))
         for p in ParameterGrid(parameter_values):
-<<<<<<< HEAD
-=======
+
             print('\nP = {}'.format(p))
->>>>>>> 6de70ef1d55fefdc93d9a97944c617058e96ce5c
             try:
                 clf.set_params(**p)
                 print('clf', clf)
@@ -598,18 +591,9 @@ def splitter(trainer, ModelTrains, models_to_run = ['RFR', 'DTR', 'KNNR', 'KNN',
                 print('ESTIMATOR FITTED:', estimator)
                 score = cross_val_score(estimator, X_train, y_train).mean()
             except:
-<<<<<<< HEAD
-                continue
-            for k in results_dataframe.keys():
-                results_dataframe[k].append(np.nan)
-                print(k, results_dataframe[k])
-                model_dict[k] =  np.nan
-            if not regress_only:
-=======
                 score = np.nan
                 estimator = clf
                 #Fit the model to the training inputs and training targets
->>>>>>> 6de70ef1d55fefdc93d9a97944c617058e96ce5c
                 try:
                     estimator.fit(X_train, y_train)
                     score = cross_val_score(estimator, X_train, y_train).mean()
@@ -631,13 +615,7 @@ def splitter(trainer, ModelTrains, models_to_run = ['RFR', 'DTR', 'KNNR', 'KNN',
             model_dict['Training_set'] = XTrain.name
             model_dict['Testing_set'] = XVal.name
             model_dict['Test_size'] = testsize 
-<<<<<<< HEAD
-            model_dict['Classifier'] = learner       
-
-            #Fit the model to the training inputs and training targets
-=======
             model_dict['Classifier'] = estimator
->>>>>>> 6de70ef1d55fefdc93d9a97944c617058e96ce5c
             model_dict['Predictors'] = cols
             model_dict['score'] = score
 
@@ -665,9 +643,7 @@ def splitter(trainer, ModelTrains, models_to_run = ['RFR', 'DTR', 'KNNR', 'KNN',
                 print(k, len(results_dataframe[k]))
             for k in model_dict:
                 print(k, model_dict[k])
-<<<<<<< HEAD
-            
-=======
+
             #threshold = np.sort(y_pred_probs)[::-1][int(.05*len(y_pred_probs))]
             #print threshold
             try:
@@ -685,7 +661,6 @@ def splitter(trainer, ModelTrains, models_to_run = ['RFR', 'DTR', 'KNNR', 'KNN',
                 model_dict['precise_at'] =  precise
                 pass
 
->>>>>>> 6de70ef1d55fefdc93d9a97944c617058e96ce5c
             # Sweep up any new or unused results keys into the results dictionary.
             for element in model_dict:
                 if element not in results_dataframe:
@@ -710,46 +685,7 @@ def splitter(trainer, ModelTrains, models_to_run = ['RFR', 'DTR', 'KNNR', 'KNN',
                     print('\n')
             model_dict[k] =  np.nan
             results = pd.DataFrame.from_dict(results_dataframe)
-<<<<<<< HEAD
-            # results.to_excel(write_to)
-            
-            if model_dict['score'] > best['score']:
-                print('\nMODEL SCORE to beat:', best['score'])
-                best['model_dict'] = None
-                best['score'] = model_dict['score']
-                best['Classifier'] = model_dict['Classifier']
-                print('\n\tBETTER MODEL!\n')
-                print('Model {}.'.format(model_dict['Model']))
-                for better_result in model_dict:
-                    if better_result != 'Model':
-                        print(better_result, model_dict[better_result])
-                best['model_dict'] = model_dict.copy()
-                best['PARAMETERS'] = clf.get_params()
-                best['model_dict'] = model_dict.copy()
-                try:
-                    importances = clf.feature_importances_
-                    sorted_idx = np.argsort(importances)
-                    padding = np.arange(len(cols)) + 0.5
-                    plt.close('all')
-                    fig, ax = plt.subplots(figsize=(10,8))
-                    t = 'Model {} Imputed {} by {}:\nVariable Importances of {}'.format(model_number, outcome_variable, learner, cols)
-                    doc = '{}_{}_{}_feat_importance.png'.format(filename, model_number, learner)
-                    plt.barh(padding, importances[sorted_idx], align='center')
-                    plt.yticks(padding, cols)
-                    plt.xlabel("Relative Importance")
-                    plt.title(t)
-                    plt.tight_layout()
-                    fig.savefig(doc)
-                except:
-                    print('Clf has no feature_importances_ attribute:') 
-            
-                # results.to_excel(write_to)
-    
-    print('\n\tBEST MODEL!:\n')
-    for key in best:
-        print(key, best[key])
-    return pd.DataFrame.from_dict(results_dataframe), best
-=======
+
             results.to_excel(write_to)
             if model_dict['cross_val_metric'] > model_dict['cross_val_metric']:
                 print('\n****\tMODEL UPDATE\t*****:')
@@ -769,9 +705,3 @@ def splitter(trainer, ModelTrains, models_to_run = ['RFR', 'DTR', 'KNNR', 'KNN',
     for key in best:
         print(key, best[key])
     return best['learner'], best['PARAMETERS'], cols, imputation_stats_and_methods
-
-
-
-
-
->>>>>>> 6de70ef1d55fefdc93d9a97944c617058e96ce5c
