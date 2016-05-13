@@ -299,7 +299,7 @@ class Trainer(object):
         if isinstance(pair, (tuple, list)):
             self._best_estimators[pair[0]] = pair[1]
         elif isinstance(pair, dict):
-            key = pair.keys().tolist()[0]
+            key = list(pair.keys())[0]
             self._best_estimators[key] = pair[key]
         else:
             raise ValueError('Must pass a binary tuple, list, or dictionary')
@@ -336,8 +336,7 @@ class Trainer(object):
         Sets the feature that is the Trainer's 
         current modelling target.'''
         if newtarget not in self._data.columns.tolist():
-            raise ValueError("{} is not a feature of Trainer object! \
-                            So it can't be a target.".format(newtarget))
+            raise ValueError("{} is not a feature of Trainer object! So it can't be a target.".format(newtarget))
         self._target = newtarget
 
     @property
@@ -401,7 +400,7 @@ class Trainer(object):
                     self._toimpute = column_list
         else:
             raise ValueError("Imputation candidates must be a list of column strings.")
-        self.__updateMissings()
+        self._missings = self.__updateMissings()
 
 
     @property
@@ -432,6 +431,7 @@ class Trainer(object):
 
     def __updateMissings(self):
         '''Updates the record of columns with missing values.'''
+        print("\nUPDATE {}'s MISSINGS\n".format(self.name))
         has_missings = self.list_features_wmissing(self._data)
         missings_list = []
         for c in has_missings:
@@ -454,9 +454,9 @@ class Trainer(object):
         Maps the features to the features that are its transformations 
         in order to identify invalid intercorrelations.'''
         if isinstance(pair, dict):
-            for k in pair.keys():
+            for k in pair:
                 if k in self._data.columns:
-                    if k not in self._transformed.keys():
+                    if k not in self._transformed:
                         self._transformed[k] = pair[k]
                     else:
                         print("Adding {} to list of {} transformations {}.".format(pair[k], k, self._transformed[k]))
@@ -585,10 +585,10 @@ class Trainer(object):
         # print('Summary Statistics on Full Data set:\n{}'.format(dataset.describe(include='all').round(2)))
         has_null = pd.DataFrame({'Total_missings' : dataset.isnull().sum()})
         has_null[(has_null.Total_missings >0)].index.tolist()
-        print('\n\n{} Features containing missing values: {}\n'
+        print('\n\n{} Features with missing values: {}\n'
               .format(len(has_null[(has_null.Total_missings >0)].index.tolist()),
                has_null[(has_null.Total_missings >0)].index.tolist()))
-        print(has_null.ix[2:,:])
+        # print(has_null.ix[2:,:])
         return has_null[(has_null.Total_missings >0)].index.tolist()
 
     

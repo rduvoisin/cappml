@@ -62,7 +62,7 @@ print('\nSummarized Data After Tagging Cases with Missing Values:\n')
 
 # Save tracer datasets as Trainer objects.(name, dataframe, outcome_name, validator = None, ModelTrainIndex = None))
 transform_features_dict = {'RevolvingUtilizationOfUnsecuredLines' : 'log',
-                           'MonthlyIncome' : 'log'}
+                           'MonthlyIncome' : 'log', 'DebtRatio': 'log'}
 coldrop = Delinquency.get('COL_DROP')
 rowdrop = Delinquency.get('ROW_DROP')
 gen_transform_data(Delinquency.get('ROW_DROP'), Delinquency, transform_features_dict)
@@ -99,10 +99,18 @@ for t in last2trainers:
 gen_transform_data(Delinquency.get('FULL_MISS'), Delinquency, transform_features_dict)
 
 ImputationTrainer = Delinquency.get('FULL_MISS_log')
+ITdata = ImputationTrainer.now
+for k in transform_features_dict:
+    ITdata.drop(k, inplace=True, axis=1)
+ImputationTrainer.set_data(ITdata)
+
 IT = ImputationTrainer
-to_impute =['MonthlyIncome','NumberOfDependents']
-IT.impute = to_impute
+# to_impute =['MonthlyIncome','NumberOfDependents']
+# IT.impute = to_impute
 
-XTrain = splitter(IT, Delinquency, models_to_run=['RFR', 'DT'])
-
-
+best['Estimator'], \
+best['PARAMETERS'], \
+cols, \
+imputation_stats_and_methods, best = splitter(IT, Delinquency, models_to_run=['RF', 'KNN', 'DT'])
+print('BEST\n', best)
+print('imputation_stats_and_methods\n', imputation_stats_and_methods)
